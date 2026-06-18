@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#F1F5F9;color:#1E293B;min-height:100vh}
+
+label{display:block;font-size:.875rem;font-weight:500;color:#374151;margin-bottom:.375rem}
+input[type=text],input[type=password],input[type=date],textarea,select{width:100%;padding:.625rem .875rem;border:1.5px solid #E2E8F0;border-radius:.5rem;font-size:.9375rem;color:#1E293B;background:white;outline:none;transition:border-color .15s;font-family:inherit}
+input:focus,textarea:focus,select:focus{border-color:#2563EB;box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+textarea{resize:vertical;min-height:110px;line-height:1.5}
+
+.badge{display:inline-flex;align-items:center;padding:.2rem .65rem;border-radius:9999px;font-size:.8125rem;font-weight:600;white-space:nowrap}
+.badge-heavy{background:#FEE2E2;color:#DC2626}
+.badge-medium{background:#FEF3C7;color:#D97706}
+.badge-light{background:#D1FAE5;color:#059669}
+
+.entry-card{background:white;border-radius:.75rem;padding:1.25rem;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:.75rem;border-left:4px solid #E2E8F0;transition:box-shadow .15s}
+.entry-card:hover{box-shadow:0 3px 10px rgba(0,0,0,.1)}
+.entry-card.heavy{border-left-color:#EF4444}
+.entry-card.medium{border-left-color:#F59E0B}
+.entry-card.light{border-left-color:#10B981}
+
+.chip{padding:.25rem .7rem;border-radius:9999px;font-size:.8125rem;font-weight:500}
+.chip-missing{background:#FEE2E2;color:#DC2626}
+.chip-present{background:#D1FAE5;color:#059669}
+
+.scroll-list{max-height:560px;overflow-y:auto}
+.scroll-list::-webkit-scrollbar{width:4px}
+.scroll-list::-webkit-scrollbar-track{background:#F1F5F9}
+.scroll-list::-webkit-scrollbar-thumb{background:#CBD5E1;border-radius:2px}
+
+.wl-opt input[type=radio]{display:none}
+.wl-opt label{display:flex;align-items:center;justify-content:center;gap:.3rem;padding:.6rem .5rem;border:2px solid #E2E8F0;border-radius:.5rem;cursor:pointer;font-size:.875rem;font-weight:500;transition:all .15s;text-align:center;white-space:nowrap}
+.wl-opt.light input:checked+label{border-color:#10B981;background:#D1FAE5;color:#065F46}
+.wl-opt.medium input:checked+label{border-color:#F59E0B;background:#FEF3C7;color:#92400E}
+.wl-opt.heavy input:checked+label{border-color:#EF4444;background:#FEE2E2;color:#991B1B}
+.wl-opt label:hover{background:#F8FAFC}
