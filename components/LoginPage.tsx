@@ -16,18 +16,23 @@ export default function LoginPage({ onLogin }: { onLogin: (s: Session) => void }
     if (!username || !password) { setError('Please enter your username and password.'); return }
     setLoading(true); setError('')
 
-    const isManager = username.trim().toLowerCase() === MANAGER_USERNAME.toLowerCase()
-    const endpoint = isManager ? '/api/auth/manager-login' : '/api/auth/login'
-    const body = isManager
-      ? { email: MANAGER_EMAIL, password }
-      : { username, password }
+    try {
+      const isManager = username.trim().toLowerCase() === MANAGER_USERNAME.toLowerCase()
+      const endpoint = isManager ? '/api/auth/manager-login' : '/api/auth/login'
+      const body = isManager
+        ? { email: MANAGER_EMAIL, password }
+        : { username, password }
 
-    const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-    const data = await res.json()
-    setLoading(false)
+      const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const data = await res.json()
 
-    if (!res.ok) { setError(data.error || 'Login failed.'); return }
-    onLogin(data.session)
+      if (!res.ok) { setError(data.error || 'Login failed.'); return }
+      onLogin(data.session)
+    } catch (err) {
+      setError('Connection error. Please try again.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (

@@ -20,10 +20,15 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
 
   const fetchToday = useCallback(async () => {
     setLoading(true)
-    const res = await fetch(`/api/entries?today=${getTodayStr()}&employee_id=${session.id}`)
-    const data = await res.json()
-    setTodayEntry(data.entries?.[0] || null)
-    setLoading(false)
+    try {
+      const res = await fetch(`/api/entries?today=${getTodayStr()}&employee_id=${session.id}`)
+      const data = await res.json()
+      setTodayEntry(data.entries?.[0] || null)
+    } catch {
+      setError('Failed to load data. Please refresh.')
+    } finally {
+      setLoading(false)
+    }
   }, [session.id])
 
   useEffect(() => { fetchToday() }, [fetchToday])
@@ -31,15 +36,20 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
   async function handleSubmit() {
     if (!work.trim()) { setError('Please describe your work for today.'); return }
     setSubmitting(true); setError('')
-    const res = await fetch('/api/entries', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ employee_id: session.id, employee_name: session.name, date: getTodayStr(), work: work.trim(), blockers: blockers.trim(), workload })
-    })
-    const data = await res.json()
-    setSubmitting(false)
-    if (!res.ok) { setError(data.error || 'Submission failed.'); return }
-    fetchToday()
+    try {
+      const res = await fetch('/api/entries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ employee_id: session.id, employee_name: session.name, date: getTodayStr(), work: work.trim(), blockers: blockers.trim(), workload })
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error || 'Submission failed.'); return }
+      fetchToday()
+    } catch {
+      setError('Connection error. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   async function handleDeleteAndResubmit() {
