@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { Session } from '@/lib/types'
 
+const MANAGER_EMAIL = 'ai.merillife@gmail.com'
 const MANAGER_USERNAME = 'Shorya'
 
 export default function LoginPage({ onLogin }: { onLogin: (s: Session) => void }) {
@@ -18,7 +19,7 @@ export default function LoginPage({ onLogin }: { onLogin: (s: Session) => void }
     const isManager = username.trim().toLowerCase() === MANAGER_USERNAME.toLowerCase()
     const endpoint = isManager ? '/api/auth/manager-login' : '/api/auth/login'
     const body = isManager
-      ? { email: username, password }
+      ? { email: MANAGER_EMAIL, password }
       : { username, password }
 
     const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
