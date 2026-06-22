@@ -4,6 +4,14 @@ import { Session } from '@/lib/types'
 
 const MANAGER_EMAIL = 'ai.merillife@gmail.com'
 const MANAGER_USERNAME = 'Shorya'
+const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif'
+
+const IS: React.CSSProperties = {
+  width: '100%', padding: '13px 16px', border: 'none', borderRadius: 0,
+  fontSize: 17, color: '#1D1D1F', background: 'white', outline: 'none',
+  fontFamily: FONT, boxSizing: 'border-box', letterSpacing: '-0.01em',
+  borderBottom: '1px solid rgba(0,0,0,0.08)',
+}
 
 export default function LoginPage({ onLogin }: { onLogin: (s: Session) => void }) {
   const [username, setUsername] = useState('')
@@ -31,45 +39,61 @@ export default function LoginPage({ onLogin }: { onLogin: (s: Session) => void }
   }
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', background: 'linear-gradient(160deg, #E8F4FF 0%, #F2F2F7 100%)' }}>
-      <div style={{ width: '100%', maxWidth: 380 }}>
-        {/* Logo */}
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div style={{ width: 72, height: 72, background: 'var(--blue)', borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: 32, boxShadow: '0 8px 24px rgba(0,122,255,0.3)' }}>📋</div>
-          <h1 style={{ fontSize: 26, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>Work Tracker</h1>
-          <p style={{ fontSize: 14, color: 'var(--text3)' }}>Daily updates for the XR team</p>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#F5F5F7', fontFamily: FONT }}>
+      <div style={{ width: '100%', maxWidth: 340, padding: '0 20px' }}>
+        <h1 style={{ textAlign: 'center', fontSize: 28, fontWeight: 700, letterSpacing: '-0.5px', marginBottom: 6, color: '#1D1D1F' }}>
+          Daily Work Tracker
+        </h1>
+        <p style={{ textAlign: 'center', fontSize: 15, color: '#6E6E73', marginBottom: 32 }}>
+          Sign in to submit your daily update
+        </p>
+
+        {error && (
+          <div style={{ background: 'rgba(255,59,48,0.08)', border: '1px solid rgba(255,59,48,0.2)', borderRadius: 10, padding: '11px 14px', fontSize: 14, color: '#CC0000', marginBottom: 16 }}>
+            {error}
+          </div>
+        )}
+
+        <div style={{ background: 'white', borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 0 rgba(0,0,0,0.04),0 4px 20px rgba(0,0,0,0.06)', marginBottom: 10 }}>
+          <input
+            type="text"
+            value={username}
+            placeholder="Username"
+            onChange={e => setUsername(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleLogin()}
+            style={IS}
+            autoFocus
+          />
+          <div style={{ position: 'relative' }}>
+            <input
+              type={showPw ? 'text' : 'password'}
+              value={password}
+              placeholder="Password"
+              onChange={e => setPassword(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleLogin()}
+              style={{ ...IS, paddingRight: 56, borderBottom: 'none' }}
+            />
+            <button
+              onClick={() => setShowPw(v => !v)}
+              style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#0071E3', fontFamily: FONT, fontSize: 13, fontWeight: 500, padding: '4px 6px' }}
+            >
+              {showPw ? 'Hide' : 'Show'}
+            </button>
+          </div>
         </div>
 
-        {/* Card */}
-        <div className="card card-p" style={{ padding: 28 }}>
-          {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
-
-          <div style={{ marginBottom: 14 }}>
-            <label>Username</label>
-            <input type="text" value={username} placeholder="e.g. rupesh"
-              onChange={e => setUsername(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleLogin()} autoFocus />
-          </div>
-
-          <div style={{ marginBottom: 20 }}>
-            <label>Password</label>
-            <div style={{ position: 'relative' }}>
-              <input type={showPw ? 'text' : 'password'} value={password} placeholder="••••••••"
-                onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleLogin()}
-                style={{ paddingRight: 44 }} />
-              <button onClick={() => setShowPw(v => !v)}
-                style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--text3)' }}>
-                {showPw ? '🙈' : '👁️'}
-              </button>
-            </div>
-          </div>
-
-          <button className="btn btn-primary btn-full" onClick={handleLogin} disabled={loading}>
-            {loading ? <><span className="spinner" style={{ width: 16, height: 16, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)', borderTopColor: 'white' }} />Signing in…</> : 'Sign In →'}
+        <div style={{ marginTop: 20 }}>
+          <button
+            onClick={handleLogin}
+            disabled={loading}
+            style={{ width: '100%', padding: '13px 22px', background: '#0071E3', color: 'white', border: 'none', borderRadius: 980, fontSize: 17, fontWeight: 590, fontFamily: FONT, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.6 : 1, letterSpacing: '-0.01em', transition: 'opacity .12s' }}
+          >
+            {loading ? 'Signing in…' : 'Sign in'}
           </button>
         </div>
 
-        <p style={{ textAlign: 'center', marginTop: 16, fontSize: 13, color: 'var(--text4)' }}>
-          Manager: use username <strong style={{ color: 'var(--text3)' }}>Shorya</strong>
+        <p style={{ textAlign: 'center', marginTop: 20, fontSize: 13, color: '#AEAEB2' }}>
+          Manager: use username <strong style={{ color: '#6E6E73' }}>Shorya</strong>
         </p>
       </div>
     </div>
