@@ -46,7 +46,7 @@ export default function BlockersTab() {
         fetch('/api/resolved-blockers').then(r => r.json()),
       ])
       const all: Entry[] = ents.entries || []
-      setEntries(all.filter(e => e.project_tasks?.some(t => t.status === 'blocked')))
+      setEntries(all.filter(e => e.project_tasks?.some(t => t.status === 'blocked' || (t.blockers && t.blockers.trim()))))
       setProjects(projs.projects || [])
       setResolvedKeys(new Set(res.resolved_keys || []))
     } catch { } finally { setLoading(false) }
@@ -67,7 +67,7 @@ export default function BlockersTab() {
   const blockerItems = entries.flatMap(entry =>
     entry.project_tasks
       .map((t, i) => ({ entry, task: t, taskIndex: i, key: `${entry.id}:${i}` }))
-      .filter(x => x.task.status === 'blocked')
+      .filter(x => x.task.status === 'blocked' || (x.task.blockers && x.task.blockers.trim()))
   )
 
   const active = blockerItems.filter(b => !resolvedKeys.has(b.key))
