@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
   if (error) return NextResponse.json({ error: 'Invalid manager credentials' }, { status: 401 })
 
   return NextResponse.json({
-    session: { id: 'manager', username: 'Shorya', name: 'Manager', role: 'manager' },
+    session: { id: 'manager', username: 'Manager', name: 'Manager', role: 'manager' },
     access_token: data.session?.access_token
   })
 }
