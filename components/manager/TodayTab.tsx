@@ -1,132 +1,94 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
-import { Entry, Employee, Project, ProjectTask, TaskStatus, Workload } from '@/lib/types'
+import React, { useState, useEffect, useCallback } from 'react'
+import { Entry, Employee, Project, ProjectTask, Workload, Session, Comment } from '@/lib/types'
+import EntryRow from './EntryRow'
 
+const FONT = `-apple-system, 'SF Pro Display', 'SF Pro Text', sans-serif`
+const CARD: React.CSSProperties = { background: 'white', borderRadius: 16, boxShadow: '0 1px 0 rgba(0,0,0,0.04), 0 2px 16px rgba(0,0,0,0.05)' }
 const TODAY = () => new Date().toISOString().slice(0, 10)
-const STATUS_LABELS: Record<TaskStatus, string> = { in_progress: 'In Progress', completed: 'Done', blocked: 'Blocked', carried: 'Carried →' }
-const STATUS_ICONS: Record<TaskStatus, string> = { in_progress: '🔵', completed: '✅', blocked: '🚫', carried: '↩️' }
 
-function emptyTask(): ProjectTask { return { project_id: '', task: '', time: '', status: 'in_progress', blockers: '' } }
-
-function TaskDisplay({ tasks, projects }: { tasks: ProjectTask[]; projects: Project[] }) {
-  if (!tasks || tasks.length === 0) return <p style={{ fontSize: 13, color: 'var(--text4)' }}>No tasks.</p>
-  return (
-    <div>
-      {tasks.map((t, i) => (
-        <div key={i} style={{ display: 'flex', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)', alignItems: 'flex-start' }}>
-          <span className={`status-chip status-${t.status}`}>{STATUS_ICONS[t.status]}</span>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 3 }}>{t.task}</div>
-            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
-              {t.project_id && (() => { const p = projects.find(x => x.id === t.project_id); return p ? <span className="project-tag" style={{ background: p.color + '18', borderColor: p.color + '40', color: p.color }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: p.color, display: 'inline-block' }} />{p.name}</span> : null })()}
-              {t.time && <span style={{ fontSize: 12, color: 'var(--text3)', background: 'var(--bg)', padding: '2px 8px', borderRadius: 'var(--r-pill)', border: '1px solid var(--border)' }}>⏱ {t.time}h</span>}
-              <span className={`status-chip status-${t.status}`}>{STATUS_LABELS[t.status]}</span>
-            </div>
-            {t.blockers && <div style={{ marginTop: 5, fontSize: 12, color: 'var(--red)', background: 'var(--red-bg)', padding: '4px 8px', borderRadius: 'var(--r-sm)' }}>🚫 {t.blockers}</div>}
-          </div>
-        </div>
-      ))}
-    </div>
-  )
+function emptyMgrTask(): { uid: number; project_id: string; task: string; time: string; status: 'in_progress' | 'completed' | 'blocked' | 'carried'; blockers: string } {
+  return { uid: Date.now() + Math.random(), project_id: '', task: '', time: '', status: 'in_progress', blockers: '' }
 }
 
 function SubmitOnBehalfModal({ employee, projects, onClose, onDone }: {
   employee: Employee; projects: Project[]; onClose: () => void; onDone: () => void
 }) {
-  const [tasks, setTasks] = useState<ProjectTask[]>([emptyTask()])
+  const [tasks, setTasks] = useState<(ProjectTask & { uid: number })[]>([{ uid: Date.now(), project_id: '', task: '', time: '', status: 'in_progress', blockers: '' }])
   const [workload, setWorkload] = useState<Workload>('medium')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
-  function updateTask(i: number, field: keyof ProjectTask, value: string) {
-    setTasks(prev => prev.map((t, idx) => idx === i ? { ...t, [field]: value } : t))
+  function updateTask(uid: number, field: keyof ProjectTask, value: string) {
+    setTasks(prev => prev.map(t => t.uid === uid ? { ...t, [field]: value } : t))
   }
 
   async function handleSubmit() {
-    const validTasks = tasks.filter(t => t.task.trim())
-    if (validTasks.length === 0) { setError('Add at least one task.'); return }
+    const valid = tasks.filter(t => t.task.trim())
+    if (!valid.length) { setError('Add at least one task.'); return }
     setSubmitting(true)
     try {
       const res = await fetch('/api/entries', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ employee_id: employee.id, employee_name: employee.name, date: TODAY(), workload, project_tasks: validTasks, submitted_by_manager: true })
+        body: JSON.stringify({ employee_id: employee.id, employee_name: employee.name, date: TODAY(), workload, project_tasks: valid.map(({ uid, ...t }) => t), submitted_by_manager: true })
       })
       if (!res.ok) { const d = await res.json(); setError(d.error || 'Failed'); return }
       onDone()
     } catch { setError('Connection error.') } finally { setSubmitting(false) }
   }
 
+  const WL_COLORS: Record<Workload, string> = { light: '#34C759', medium: '#FF9500', heavy: '#FF3B30' }
+
   return (
-    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal">
-        <div className="flex-between" style={{ marginBottom: 18 }}>
-          <h3 style={{ fontSize: 17, fontWeight: 700 }}>Submit for {employee.name}</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: 'var(--text4)' }}>✕</button>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px 16px' }}>
+      <div style={{ background: 'white', borderRadius: 20, maxWidth: 520, width: '100%', boxShadow: '0 24px 80px rgba(0,0,0,0.2)', overflow: 'hidden' }}>
+        <div style={{ padding: '18px 24px', borderBottom: '1px solid rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ fontWeight: 700, fontSize: 16, fontFamily: FONT }}>Submit for {employee.name}</div>
+          <button onClick={onClose} style={{ width: 28, height: 28, background: '#F5F5F7', border: 'none', borderRadius: '50%', cursor: 'pointer', fontSize: 18, color: '#6E6E73', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
         </div>
-        {error && <div className="alert alert-error">{error}</div>}
-        <div style={{ marginBottom: 12 }}>
-          {tasks.map((t, i) => (
-            <div key={i} style={{ background: 'var(--bg)', borderRadius: 'var(--r-sm)', padding: 12, marginBottom: 8 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 60px', gap: 8, marginBottom: 8 }}>
-                <select value={t.project_id} onChange={e => updateTask(i, 'project_id', e.target.value)} style={{ fontSize: 13 }}>
+        <div style={{ padding: '20px 24px' }}>
+          {error && <div style={{ background: 'rgba(255,59,48,0.08)', border: '1px solid rgba(255,59,48,0.2)', borderRadius: 8, padding: '8px 12px', fontSize: 13, color: '#FF3B30', marginBottom: 12, fontFamily: FONT }}>{error}</div>}
+          {tasks.map(t => (
+            <div key={t.uid} style={{ background: '#F5F5F7', borderRadius: 10, padding: 12, marginBottom: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 60px', gap: 8, marginBottom: 8 }}>
+                <select value={t.project_id} onChange={e => updateTask(t.uid, 'project_id', e.target.value)}
+                  style={{ padding: '7px 10px', fontSize: 13, borderRadius: 7, border: 'none', fontFamily: FONT, background: 'white', outline: 'none' }}>
                   <option value="">No project</option>
-                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  {projects.filter(p => p.status === 'active').map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
-                <input type="text" value={t.task} placeholder="Task description" onChange={e => updateTask(i, 'task', e.target.value)} style={{ fontSize: 14 }} />
-                <input type="number" value={t.time} placeholder="hrs" onChange={e => updateTask(i, 'time', e.target.value)} style={{ fontSize: 14 }} />
+                <select value={t.status} onChange={e => updateTask(t.uid, 'status', e.target.value)}
+                  style={{ padding: '7px 8px', fontSize: 12, borderRadius: 7, border: 'none', fontFamily: FONT, background: 'white', outline: 'none' }}>
+                  <option value="in_progress">In Progress</option>
+                  <option value="completed">Done</option>
+                  <option value="blocked">Blocked</option>
+                  <option value="carried">Carried</option>
+                </select>
+                <input type="text" value={t.time} onChange={e => updateTask(t.uid, 'time', e.target.value)}
+                  placeholder="3h" style={{ padding: '7px 8px', fontSize: 13, borderRadius: 7, border: 'none', fontFamily: FONT, background: 'white', outline: 'none' }} />
               </div>
-              <div className="status-selector">
-                {(['in_progress', 'completed', 'blocked', 'carried'] as TaskStatus[]).map(s => (
-                  <button key={s} className={t.status === s ? `active-${s}` : ''} onClick={() => updateTask(i, 'status', s)}>
-                    {STATUS_ICONS[s]} {STATUS_LABELS[s]}
-                  </button>
-                ))}
-              </div>
-              {t.status === 'blocked' && (
-                <input type="text" value={t.blockers} placeholder="Blocker…" onChange={e => updateTask(i, 'blockers', e.target.value)} style={{ marginTop: 8, fontSize: 13 }} />
-              )}
+              <textarea value={t.task} onChange={e => updateTask(t.uid, 'task', e.target.value)}
+                placeholder="Task description…" rows={2}
+                style={{ width: '100%', padding: '8px 10px', border: 'none', borderRadius: 7, fontSize: 13, fontFamily: FONT, resize: 'none', boxSizing: 'border-box', background: 'white', outline: 'none', lineHeight: 1.5 }} />
             </div>
           ))}
-          <button className="btn btn-ghost btn-sm" onClick={() => setTasks(p => [...p, emptyTask()])}>+ Add Task</button>
-        </div>
-        <div style={{ marginBottom: 16 }}>
-          <label>Workload</label>
-          <div className="wl-selector">
-            {(['light', 'medium', 'heavy'] as Workload[]).map(w => (
-              <button key={w} className={`wl-btn ${workload === w ? `active-${w}` : ''}`} onClick={() => setWorkload(w)}>
-                {w === 'light' ? '🟢 Light' : w === 'medium' ? '🟡 Medium' : '🔴 Heavy'}
-              </button>
-            ))}
+          <button onClick={() => setTasks(prev => [...prev, { uid: Date.now(), project_id: '', task: '', time: '', status: 'in_progress', blockers: '' }])}
+            style={{ fontSize: 12, color: '#0071E3', background: 'none', border: '1px dashed rgba(0,113,227,0.35)', borderRadius: 7, cursor: 'pointer', padding: '5px 10px', fontFamily: FONT, marginBottom: 14 }}>
+            + Add Task
+          </button>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#AEAEB2', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8, fontFamily: FONT }}>Workload</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {(['light', 'medium', 'heavy'] as Workload[]).map(w => (
+                <button key={w} onClick={() => setWorkload(w)}
+                  style={{ flex: 1, padding: '8px', borderRadius: 980, fontSize: 13, fontWeight: 590, cursor: 'pointer', fontFamily: FONT, border: 'none', background: workload === w ? WL_COLORS[w] : '#F5F5F7', color: workload === w ? 'white' : '#6E6E73', transition: 'all 0.12s' }}>
+                  {w.charAt(0).toUpperCase() + w.slice(1)}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-        <button className="btn btn-primary btn-full" onClick={handleSubmit} disabled={submitting}>
-          {submitting ? 'Submitting…' : 'Submit on Behalf'}
-        </button>
-      </div>
-    </div>
-  )
-}
-
-function AddCommentModal({ entryId, onClose, onDone }: { entryId: string; onClose: () => void; onDone: () => void }) {
-  const [text, setText] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  async function handleAdd() {
-    if (!text.trim()) return
-    setSubmitting(true)
-    try {
-      await fetch('/api/comments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entry_id: entryId, text }) })
-      onDone()
-    } finally { setSubmitting(false) }
-  }
-  return (
-    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 400 }}>
-        <h3 style={{ fontSize: 17, fontWeight: 700, marginBottom: 14 }}>Add Comment</h3>
-        <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Enter your note or feedback…" style={{ marginBottom: 12 }} />
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-secondary" style={{ flex: 1 }} onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleAdd} disabled={submitting}>
-            {submitting ? 'Adding…' : 'Add Comment'}
+          <button onClick={handleSubmit} disabled={submitting}
+            style={{ width: '100%', padding: '12px', background: '#0071E3', color: 'white', border: 'none', borderRadius: 980, fontSize: 15, fontWeight: 590, cursor: 'pointer', fontFamily: FONT }}>
+            {submitting ? 'Submitting…' : 'Submit on Behalf'}
           </button>
         </div>
       </div>
@@ -134,17 +96,20 @@ function AddCommentModal({ entryId, onClose, onDone }: { entryId: string; onClos
   )
 }
 
-export default function TodayTab() {
+export default function TodayTab({ managerSession }: { managerSession: Session }) {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [entries, setEntries] = useState<Entry[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [reviewedIds, setReviewedIds] = useState<Set<string>>(new Set())
-  const [comments, setComments] = useState<Record<string, { id: string; text: string; author: string; timestamp: string }[]>>({})
+  const [comments, setComments] = useState<Record<string, Comment[]>>({})
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState('')
-  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [statFilter, setStatFilter] = useState('')
+  const [nameFilter, setNameFilter] = useState('')
+  const [showMgrUpdate, setShowMgrUpdate] = useState(false)
+  const [mgrTasks, setMgrTasks] = useState([emptyMgrTask()])
+  const [mgrWl, setMgrWl] = useState<Workload>('medium')
+  const [submittingMgr, setSubmittingMgr] = useState(false)
   const [submitBehalfEmp, setSubmitBehalfEmp] = useState<Employee | null>(null)
-  const [commentEntryId, setCommentEntryId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -159,12 +124,22 @@ export default function TodayTab() {
       setEntries(ents.entries || [])
       setProjects(projs.projects || [])
       setReviewedIds(new Set(rev.reviewed_ids || []))
-    } catch { /* silent */ } finally { setLoading(false) }
+    } catch { } finally { setLoading(false) }
   }, [])
 
   useEffect(() => { load() }, [load])
 
-  async function fetchComments(entryId: string) {
+  async function onExpand(entryId: string) {
+    if (comments[entryId] !== undefined) return
+    try {
+      const res = await fetch(`/api/comments?entry_id=${entryId}`)
+      const d = await res.json()
+      setComments(prev => ({ ...prev, [entryId]: d.comments || [] }))
+    } catch { setComments(prev => ({ ...prev, [entryId]: [] })) }
+  }
+
+  async function handleAddComment(entryId: string, text: string) {
+    await fetch('/api/comments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entry_id: entryId, text }) })
     const res = await fetch(`/api/comments?entry_id=${entryId}`)
     const d = await res.json()
     setComments(prev => ({ ...prev, [entryId]: d.comments || [] }))
@@ -181,7 +156,6 @@ export default function TodayTab() {
   }
 
   async function markAbsent(emp: Employee) {
-    if (!confirm(`Mark ${emp.name} as absent for today?`)) return
     await fetch('/api/entries', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ employee_id: emp.id, employee_name: emp.name, date: TODAY(), workload: 'light', is_absent: true, project_tasks: [], submitted_by_manager: true })
@@ -189,164 +163,208 @@ export default function TodayTab() {
     load()
   }
 
-  const nonManagerEmps = employees.filter(e => e.role === 'employee')
-  const filtered = nonManagerEmps.filter(e => e.name.toLowerCase().includes(filter.toLowerCase()))
-  const entryMap = Object.fromEntries(entries.map(e => [e.employee_id, e]))
+  async function deleteEntry(id: string) {
+    if (!confirm('Delete this entry?')) return
+    await fetch(`/api/entries?id=${id}`, { method: 'DELETE' })
+    load()
+  }
 
-  const submitted = filtered.filter(e => entryMap[e.id] && !entryMap[e.id].is_absent)
-  const absent = filtered.filter(e => entryMap[e.id]?.is_absent)
-  const missing = filtered.filter(e => !entryMap[e.id])
-  const withBlockers = submitted.filter(e => entryMap[e.id]?.project_tasks?.some(t => t.status === 'blocked'))
-  const heavyLoad = submitted.filter(e => entryMap[e.id]?.workload === 'heavy')
+  async function submitMgrUpdate() {
+    const valid = mgrTasks.filter(t => t.task.trim())
+    if (!valid.length) return
+    setSubmittingMgr(true)
+    try {
+      await fetch('/api/entries', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ employee_id: managerSession.id, employee_name: managerSession.name, date: TODAY(), workload: mgrWl, project_tasks: valid.map(({ uid, ...t }) => t), submitted_by_manager: false })
+      })
+      setShowMgrUpdate(false)
+      setMgrTasks([emptyMgrTask()])
+      load()
+    } finally { setSubmittingMgr(false) }
+  }
 
-  if (loading) return <div className="empty-state"><div className="spinner" style={{ width: 28, height: 28, margin: '0 auto' }} /></div>
+  const nonMgrEmps = employees.filter(e => e.role === 'employee')
+  const mgrEntry = entries.find(e => e.employee_id === managerSession.id && !e.is_absent)
+  const empEntryMap = Object.fromEntries(
+    entries.filter(e => nonMgrEmps.some(emp => emp.id === e.employee_id)).map(e => [e.employee_id, e])
+  )
+  const submitted = nonMgrEmps.filter(e => empEntryMap[e.id] && !empEntryMap[e.id].is_absent)
+  const missing = nonMgrEmps.filter(e => !empEntryMap[e.id])
+  const heavy = submitted.filter(e => empEntryMap[e.id]?.workload === 'heavy')
+  const medium = submitted.filter(e => empEntryMap[e.id]?.workload === 'medium')
+  const light = submitted.filter(e => empEntryMap[e.id]?.workload === 'light')
+
+  const activeFilter = statFilter || nameFilter
+  let displayEntries = Object.values(empEntryMap).filter(e => !e.is_absent)
+  if (statFilter === 'heavy') displayEntries = displayEntries.filter(e => e.workload === 'heavy')
+  else if (statFilter === 'medium') displayEntries = displayEntries.filter(e => e.workload === 'medium')
+  else if (statFilter === 'light') displayEntries = displayEntries.filter(e => e.workload === 'light')
+  if (nameFilter) displayEntries = displayEntries.filter(e => e.employee_id === nameFilter)
+  displayEntries.sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+
+  const stats = [
+    { id: 'submitted', label: 'Submitted', value: submitted.length, color: '#34C759' },
+    { id: 'pending', label: 'Pending', value: missing.length, color: '#FF9500' },
+    { id: 'heavy', label: 'Heavy', value: heavy.length, color: '#FF3B30' },
+    { id: 'medium', label: 'Medium', value: medium.length, color: '#FF9500' },
+    { id: 'light', label: 'Light', value: light.length, color: '#34C759' },
+  ]
+
+  if (loading) return (
+    <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
+      <div style={{ width: 28, height: 28, border: '3px solid #F2F2F7', borderTopColor: '#0071E3', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+    </div>
+  )
 
   return (
     <div>
-      {/* Stat cards */}
-      <div className="stat-grid">
-        <div className="stat-card">
-          <div className="stat-value" style={{ color: 'var(--green)' }}>{submitted.length}</div>
-          <div className="stat-label">Submitted</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value" style={{ color: 'var(--text4)' }}>{missing.length}</div>
-          <div className="stat-label">Missing</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value" style={{ color: 'var(--red)' }}>{absent.length}</div>
-          <div className="stat-label">Absent</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value" style={{ color: 'var(--orange)' }}>{withBlockers.length}</div>
-          <div className="stat-label">Blockers</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value" style={{ color: 'var(--red)' }}>{heavyLoad.length}</div>
-          <div className="stat-label">Heavy Load</div>
-        </div>
+      {/* Stat card filters */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, marginBottom: 16 }}>
+        {stats.map(s => (
+          <div key={s.id} onClick={() => setStatFilter(f => f === s.id ? '' : s.id)}
+            style={{ ...CARD, padding: '14px 12px', cursor: 'pointer', textAlign: 'center', transition: 'opacity 0.15s, box-shadow 0.15s', opacity: activeFilter && statFilter !== s.id ? 0.45 : 1, boxShadow: statFilter === s.id ? `0 0 0 2px ${s.color}, 0 4px 20px rgba(0,0,0,0.1)` : '0 1px 0 rgba(0,0,0,0.04), 0 2px 16px rgba(0,0,0,0.05)' }}>
+            <div style={{ fontWeight: 700, fontSize: 22, color: s.color, fontFamily: FONT, letterSpacing: '-0.03em', lineHeight: 1 }}>{s.value}</div>
+            <div style={{ fontSize: 11, color: '#AEAEB2', fontFamily: FONT, marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{s.label}</div>
+          </div>
+        ))}
       </div>
 
-      {/* Filter */}
-      <div style={{ marginBottom: 16 }}>
-        <input type="text" placeholder="🔍 Filter by name…" value={filter} onChange={e => setFilter(e.target.value)} />
+      {/* Filter bar */}
+      <div style={{ ...CARD, padding: '12px 16px', marginBottom: 16, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        <select value={nameFilter} onChange={e => setNameFilter(e.target.value)}
+          style={{ flex: 1, minWidth: 150, padding: '8px 12px', fontSize: 13, borderRadius: 8, border: 'none', background: '#F5F5F7', fontFamily: FONT, outline: 'none', color: '#1D1D1F' }}>
+          <option value="">All Employees</option>
+          {nonMgrEmps.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+        </select>
+        {activeFilter && (
+          <button onClick={() => { setStatFilter(''); setNameFilter('') }}
+            style={{ fontSize: 13, color: '#0071E3', background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap', padding: '4px 0' }}>
+            Clear filters ×
+          </button>
+        )}
       </div>
 
-      {/* Submitted entries */}
-      {submitted.length > 0 && (
-        <div style={{ marginBottom: 20 }}>
-          <div className="section-header">
-            <span className="section-title">✅ Submitted ({submitted.length})</span>
-          </div>
-          {submitted.map(emp => {
-            const entry = entryMap[emp.id]
-            const isExpanded = expandedId === entry.id
-            const isReviewed = reviewedIds.has(entry.id)
-            return (
-              <div key={emp.id} className={`entry-card ${entry.workload}`} style={{ borderLeftColor: isReviewed ? 'var(--text4)' : undefined }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }} onClick={() => {
-                  if (!isExpanded) fetchComments(entry.id)
-                  setExpandedId(isExpanded ? null : entry.id)
-                }}>
-                  <div className="avatar" style={{ background: 'var(--blue-bg)', color: 'var(--blue)', fontSize: 13 }}>
-                    {emp.name.charAt(0)}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: 15 }}>{emp.name}
-                      {entry.submitted_by_manager && <span style={{ fontSize: 11, color: 'var(--text4)', marginLeft: 6 }}>via manager</span>}
-                    </div>
-                    <div style={{ fontSize: 13, color: 'var(--text3)', display: 'flex', gap: 6, alignItems: 'center', marginTop: 2 }}>
-                      <span className={`badge badge-${entry.workload}`}>{entry.workload}</span>
-                      <span>{entry.project_tasks?.length || 0} tasks</span>
-                      {entry.project_tasks?.some(t => t.status === 'blocked') && <span style={{ color: 'var(--red)' }}>🚫 blocker</span>}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    {isReviewed && <span style={{ fontSize: 12, color: 'var(--text4)', fontWeight: 600 }}>✓ Reviewed</span>}
-                    <span style={{ color: 'var(--text4)', fontSize: 18 }}>{isExpanded ? '▾' : '▸'}</span>
-                  </div>
-                </div>
-                {isExpanded && (
-                  <div style={{ marginTop: 14 }}>
-                    <div className="divider" />
-                    <TaskDisplay tasks={entry.project_tasks} projects={projects} />
-                    {/* Comments */}
-                    {comments[entry.id]?.length > 0 && (
-                      <div style={{ marginTop: 12, padding: 10, background: 'var(--bg)', borderRadius: 'var(--r-sm)' }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text3)', marginBottom: 6 }}>MANAGER NOTES</div>
-                        {comments[entry.id].map(c => (
-                          <div key={c.id} style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 4 }}>💬 {c.text}</div>
-                        ))}
-                      </div>
-                    )}
-                    <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-                      <button className={`btn btn-sm ${isReviewed ? 'btn-secondary' : 'btn-primary'}`} onClick={() => toggleReviewed(entry.id)}>
-                        {isReviewed ? '↩ Unmark Reviewed' : '✓ Mark Reviewed'}
-                      </button>
-                      <button className="btn btn-secondary btn-sm" onClick={() => setCommentEntryId(entry.id)}>💬 Add Note</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )
-          })}
+      {/* Manager's own update prompt */}
+      {!mgrEntry && (
+        <div style={{ ...CARD, padding: '11px 18px', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, color: '#6E6E73', fontFamily: FONT }}>You haven&apos;t logged your own update today.</span>
+          <button onClick={() => setShowMgrUpdate(v => !v)}
+            style={{ fontSize: 13, color: '#0071E3', background: 'none', border: '1px solid rgba(0,113,227,0.25)', borderRadius: 8, cursor: 'pointer', padding: '5px 12px', fontFamily: FONT, fontWeight: 500 }}>
+            {showMgrUpdate ? 'Cancel' : 'Add my update'}
+          </button>
+        </div>
+      )}
+      {mgrEntry && (
+        <div style={{ ...CARD, padding: '10px 18px', marginBottom: 12, borderLeft: '3px solid #34C759', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 13, color: '#1A6B31', fontWeight: 500, fontFamily: FONT }}>Your update is logged for today.</span>
         </div>
       )}
 
-      {/* Missing employees */}
-      {missing.length > 0 && (
-        <div style={{ marginBottom: 20 }}>
-          <div className="section-header">
-            <span className="section-title">⏳ Pending ({missing.length})</span>
-          </div>
-          {missing.map(emp => (
-            <div key={emp.id} style={{ background: 'var(--card)', borderRadius: 'var(--r-md)', padding: 14, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 10, boxShadow: 'var(--shadow)' }}>
-              <div className="avatar" style={{ background: 'var(--bg)', color: 'var(--text4)', fontSize: 13 }}>{emp.name.charAt(0)}</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--text)' }}>{emp.name}</div>
-                <div style={{ fontSize: 13, color: 'var(--text4)' }}>Not submitted yet</div>
+      {/* Manager update form */}
+      {showMgrUpdate && !mgrEntry && (
+        <div style={{ ...CARD, padding: '16px 18px', marginBottom: 12 }}>
+          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10, fontFamily: FONT }}>My Update — {TODAY()}</div>
+          {mgrTasks.map(t => (
+            <div key={t.uid} style={{ background: '#F5F5F7', borderRadius: 10, padding: 10, marginBottom: 8 }}>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                <select value={t.project_id} onChange={e => setMgrTasks(prev => prev.map(x => x.uid === t.uid ? { ...x, project_id: e.target.value } : x))}
+                  style={{ flex: 2, minWidth: 120, padding: '7px 10px', fontSize: 13, borderRadius: 7, border: 'none', fontFamily: FONT, background: 'white', outline: 'none' }}>
+                  <option value="">— Project —</option>
+                  {projects.filter(p => p.status === 'active').map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  <option value="__other__">Other Work</option>
+                </select>
+                <select value={t.status} onChange={e => setMgrTasks(prev => prev.map(x => x.uid === t.uid ? { ...x, status: e.target.value as 'in_progress' | 'completed' | 'blocked' | 'carried' } : x))}
+                  style={{ padding: '7px 10px', fontSize: 12, borderRadius: 7, border: 'none', fontFamily: FONT, background: 'white', outline: 'none' }}>
+                  <option value="in_progress">In Progress</option>
+                  <option value="completed">Completed</option>
+                  <option value="blocked">Blocked</option>
+                  <option value="carried">Carried</option>
+                </select>
+                <input type="text" value={t.time} onChange={e => setMgrTasks(prev => prev.map(x => x.uid === t.uid ? { ...x, time: e.target.value } : x))}
+                  placeholder="3h" style={{ width: 56, padding: '7px 10px', fontSize: 13, borderRadius: 7, border: 'none', fontFamily: FONT, background: 'white', outline: 'none' }} />
               </div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button className="btn btn-secondary btn-sm" onClick={() => setSubmitBehalfEmp(emp)}>Submit for them</button>
-                <button className="btn btn-danger btn-sm" onClick={() => markAbsent(emp)}>Mark Absent</button>
-              </div>
+              <textarea value={t.task} onChange={e => setMgrTasks(prev => prev.map(x => x.uid === t.uid ? { ...x, task: e.target.value } : x))}
+                placeholder="What did you work on?" rows={2}
+                style={{ width: '100%', padding: '8px 10px', border: 'none', borderRadius: 7, fontSize: 13, fontFamily: FONT, resize: 'vertical', boxSizing: 'border-box', background: 'white', lineHeight: 1.5, outline: 'none' }} />
             </div>
           ))}
-        </div>
-      )}
-
-      {/* Absent */}
-      {absent.length > 0 && (
-        <div>
-          <div className="section-header">
-            <span className="section-title">🏖 Absent ({absent.length})</span>
+          <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button onClick={() => setMgrTasks(prev => [...prev, emptyMgrTask()])}
+              style={{ fontSize: 12, color: '#0071E3', background: 'none', border: '1px dashed rgba(0,113,227,0.35)', borderRadius: 7, cursor: 'pointer', padding: '5px 10px', fontFamily: FONT }}>
+              + project
+            </button>
+            <select value={mgrWl} onChange={e => setMgrWl(e.target.value as Workload)}
+              style={{ padding: '5px 10px', fontSize: 12, borderRadius: 7, border: 'none', background: '#F5F5F7', fontFamily: FONT, outline: 'none' }}>
+              <option value="light">Light</option>
+              <option value="medium">Medium</option>
+              <option value="heavy">Heavy</option>
+            </select>
+            <button onClick={submitMgrUpdate} disabled={submittingMgr}
+              style={{ padding: '7px 16px', background: '#0071E3', color: 'white', border: 'none', borderRadius: 980, fontSize: 13, fontWeight: 590, cursor: 'pointer', fontFamily: FONT }}>
+              {submittingMgr ? 'Submitting…' : 'Submit'}
+            </button>
           </div>
-          {absent.map(emp => (
-            <div key={emp.id} className="entry-card absent" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div className="avatar" style={{ background: 'var(--bg)', color: 'var(--text4)', fontSize: 13 }}>{emp.name.charAt(0)}</div>
-              <div>
-                <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--text3)' }}>{emp.name}</div>
-                <div style={{ fontSize: 13, color: 'var(--text4)' }}>Marked absent</div>
-              </div>
-            </div>
-          ))}
         </div>
       )}
 
-      {/* Modals */}
+      {/* Yet to Submit banner */}
+      {missing.length > 0 && !activeFilter && (
+        <div style={{ ...CARD, padding: '16px 20px', marginBottom: 16, borderLeft: '3px solid #FF9500' }}>
+          <div style={{ fontWeight: 600, color: '#B25900', marginBottom: 12, fontSize: 14, fontFamily: FONT }}>Yet to Submit ({missing.length})</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {missing.map(e => (
+              <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ padding: '4px 10px', borderRadius: 980, fontSize: 13, fontWeight: 500, background: 'rgba(255,59,48,0.08)', color: '#FF3B30', fontFamily: FONT }}>{e.name}</span>
+                <button onClick={() => markAbsent(e)}
+                  style={{ padding: '3px 8px', background: '#F5F5F7', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: '#6E6E73', fontFamily: FONT }}>
+                  Absent
+                </button>
+                <button onClick={() => setSubmitBehalfEmp(e)}
+                  style={{ padding: '3px 8px', background: 'rgba(0,113,227,0.08)', border: 'none', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: '#0071E3', fontFamily: FONT }}>
+                  Submit
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {missing.length === 0 && !activeFilter && (
+        <div style={{ ...CARD, padding: '14px 20px', marginBottom: 16, borderLeft: '3px solid #34C759' }}>
+          <div style={{ color: '#1A6B31', fontWeight: 600, fontSize: 14, fontFamily: FONT }}>All team members have submitted today ✓</div>
+        </div>
+      )}
+
+      {/* Entries list */}
+      <div>
+        {displayEntries.map(e => (
+          <EntryRow
+            key={e.id}
+            entry={e}
+            showName
+            projects={projects}
+            isManager
+            comments={comments[e.id]}
+            onAddComment={handleAddComment}
+            reviewed={reviewedIds.has(e.id)}
+            onToggleReviewed={toggleReviewed}
+            onDelete={deleteEntry}
+            onExpand={onExpand}
+          />
+        ))}
+        {displayEntries.length === 0 && statFilter !== 'pending' && activeFilter && (
+          <div style={{ ...CARD, padding: '48px 20px', textAlign: 'center', color: '#AEAEB2', fontFamily: FONT, fontSize: 14 }}>
+            No entries match the current filter.
+          </div>
+        )}
+      </div>
+
       {submitBehalfEmp && (
         <SubmitOnBehalfModal
           employee={submitBehalfEmp}
           projects={projects}
           onClose={() => setSubmitBehalfEmp(null)}
           onDone={() => { setSubmitBehalfEmp(null); load() }}
-        />
-      )}
-      {commentEntryId && (
-        <AddCommentModal
-          entryId={commentEntryId}
-          onClose={() => setCommentEntryId(null)}
-          onDone={() => { fetchComments(commentEntryId); setCommentEntryId(null) }}
         />
       )}
     </div>

@@ -2,6 +2,32 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Entry, Project } from '@/lib/types'
 
+const FONT = `-apple-system, 'SF Pro Display', 'SF Pro Text', sans-serif`
+const CARD: React.CSSProperties = { background: 'white', borderRadius: 16, boxShadow: '0 1px 0 rgba(0,0,0,0.04), 0 2px 16px rgba(0,0,0,0.05)' }
+import React from 'react'
+
+function fmtDate(s: string) {
+  return new Date(s + 'T12:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+}
+
+function dayAge(dateStr: string) {
+  const today = new Date().toISOString().slice(0, 10)
+  const diff = Math.floor((new Date(today + 'T12:00:00').getTime() - new Date(dateStr + 'T12:00:00').getTime()) / 86400000)
+  return diff
+}
+
+function ageBorderColor(age: number) {
+  if (age >= 2) return '#FF3B30'
+  if (age === 1) return '#FF9500'
+  return '#AEAEB2'
+}
+
+function ageLabel(age: number) {
+  if (age === 0) return 'Today'
+  if (age === 1) return 'Yesterday'
+  return `${age}d ago`
+}
+
 export default function BlockersTab() {
   const [entries, setEntries] = useState<Entry[]>([])
   const [projects, setProjects] = useState<Project[]>([])
@@ -23,7 +49,7 @@ export default function BlockersTab() {
       setEntries(all.filter(e => e.project_tasks?.some(t => t.status === 'blocked')))
       setProjects(projs.projects || [])
       setResolvedKeys(new Set(res.resolved_keys || []))
-    } catch { /* silent */ } finally { setLoading(false) }
+    } catch { } finally { setLoading(false) }
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -38,7 +64,6 @@ export default function BlockersTab() {
     }
   }
 
-  // Flatten all blocker tasks with their entry context
   const blockerItems = entries.flatMap(entry =>
     entry.project_tasks
       .map((t, i) => ({ entry, task: t, taskIndex: i, key: `${entry.id}:${i}` }))
@@ -47,66 +72,80 @@ export default function BlockersTab() {
 
   const active = blockerItems.filter(b => !resolvedKeys.has(b.key))
   const resolved = blockerItems.filter(b => resolvedKeys.has(b.key))
+  const displayed = showResolved ? [...active, ...resolved] : active
 
-  if (loading) return <div className="empty-state"><div className="spinner" style={{ width: 28, height: 28, margin: '0 auto' }} /></div>
+  if (loading) return (
+    <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
+      <div style={{ width: 28, height: 28, border: '3px solid #F2F2F7', borderTopColor: '#0071E3', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+    </div>
+  )
 
   return (
     <div>
-      <div className="flex-between" style={{ marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 10 }}>
         <div>
-          <div className="section-title">🚫 Blockers</div>
-          <div style={{ fontSize: 13, color: 'var(--text3)', marginTop: 2 }}>Last 30 days</div>
+          <div style={{ fontWeight: 700, fontSize: 22, color: '#1D1D1F', fontFamily: FONT, letterSpacing: '-0.02em' }}>Blockers</div>
+          <div style={{ fontSize: 13, color: '#6E6E73', marginTop: 2, fontFamily: FONT }}>Last 30 days · {active.length} active</div>
         </div>
-        <button className="btn btn-secondary btn-sm" onClick={() => setShowResolved(v => !v)}>
-          {showResolved ? '🔴 Hide Resolved' : `✅ Show Resolved (${resolved.length})`}
+        <button onClick={() => setShowResolved(v => !v)}
+          style={{ padding: '7px 14px', background: showResolved ? '#F5F5F7' : 'none', border: '1.5px solid rgba(0,113,227,0.3)', borderRadius: 980, fontSize: 13, cursor: 'pointer', color: '#0071E3', fontFamily: FONT }}>
+          {showResolved ? 'Hide Resolved' : `Show Resolved (${resolved.length})`}
         </button>
       </div>
 
       {active.length === 0 && !showResolved && (
-        <div className="empty-state">
-          <div className="empty-state-icon">🎉</div>
-          <div className="empty-state-text">No active blockers</div>
-          <div className="empty-state-sub">All clear for the last 30 days</div>
+        <div style={{ ...CARD, padding: '60px 20px', textAlign: 'center' }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>🎉</div>
+          <div style={{ fontWeight: 600, fontSize: 16, color: '#1D1D1F', fontFamily: FONT, marginBottom: 4 }}>No active blockers</div>
+          <div style={{ fontSize: 14, color: '#AEAEB2', fontFamily: FONT }}>All clear for the last 30 days</div>
         </div>
       )}
 
-      {(showResolved ? [...active, ...resolved] : active).map(({ entry, task, key }) => {
+      {displayed.map(({ entry, task, key }) => {
         const proj = projects.find(p => p.id === task.project_id)
         const isResolved = resolvedKeys.has(key)
-        const date = new Date(entry.date + 'T12:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+        const age = dayAge(entry.date)
+        const borderColor = isResolved ? '#34C759' : ageBorderColor(age)
+
         return (
-          <div key={key} className="card" style={{ padding: 16, marginBottom: 10, borderLeft: `4px solid ${isResolved ? 'var(--green)' : 'var(--red)'}`, opacity: isResolved ? 0.7 : 1 }}>
-            <div className="flex-between" style={{ marginBottom: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div className="avatar" style={{ background: 'var(--red-bg)', color: 'var(--red)', fontSize: 13, width: 32, height: 32 }}>
-                  {entry.employee_name.charAt(0)}
+          <div key={key} style={{ ...CARD, marginBottom: 12, borderLeft: `4px solid ${borderColor}`, opacity: isResolved ? 0.65 : 1 }}>
+            <div style={{ padding: '16px 20px' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 34, height: 34, borderRadius: '50%', background: isResolved ? '#F2F2F7' : 'rgba(255,59,48,0.10)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14, color: isResolved ? '#6E6E73' : '#FF3B30', flexShrink: 0, fontFamily: FONT }}>
+                    {entry.employee_name.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 15, color: '#1D1D1F', fontFamily: FONT }}>{entry.employee_name}</div>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 2 }}>
+                      <span style={{ fontSize: 12, color: '#6E6E73', fontFamily: FONT }}>{fmtDate(entry.date)}</span>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: borderColor, fontFamily: FONT }}>{ageLabel(age)}</span>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <span style={{ fontWeight: 600, fontSize: 15 }}>{entry.employee_name}</span>
-                  <span style={{ fontSize: 13, color: 'var(--text3)', marginLeft: 8 }}>{date}</span>
-                </div>
+                <button onClick={() => toggleResolved(key)}
+                  style={{ padding: '6px 14px', borderRadius: 980, fontSize: 12, fontWeight: 590, cursor: 'pointer', fontFamily: FONT, flexShrink: 0, border: 'none', background: isResolved ? '#F5F5F7' : '#0071E3', color: isResolved ? '#6E6E73' : 'white' }}>
+                  {isResolved ? '↩ Reopen' : '✓ Resolve'}
+                </button>
               </div>
-              <button className={`btn btn-sm ${isResolved ? 'btn-secondary' : 'btn-primary'}`} onClick={() => toggleResolved(key)}>
-                {isResolved ? '↩ Reopen' : '✓ Resolve'}
-              </button>
+
+              <div style={{ fontSize: 14, fontWeight: 500, color: '#1D1D1F', fontFamily: FONT, marginBottom: 8, lineHeight: 1.4 }}>{task.task}</div>
+
+              {proj && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 980, fontSize: 11, fontWeight: 600, background: (proj.color || '#AEAEB2') + '20', color: proj.color || '#6E6E73', fontFamily: FONT, marginBottom: 10 }}>
+                  <span style={{ width: 5, height: 5, borderRadius: '50%', background: proj.color || '#AEAEB2', display: 'inline-block' }} />
+                  {proj.name}
+                </span>
+              )}
+
+              <div style={{ padding: '8px 12px', background: 'rgba(255,59,48,0.06)', borderRadius: 8, fontSize: 13, color: '#CC2E26', borderLeft: '3px solid rgba(255,59,48,0.4)', fontFamily: FONT, lineHeight: 1.4 }}>
+                {task.blockers}
+              </div>
+
+              {isResolved && (
+                <div style={{ marginTop: 8, fontSize: 12, color: '#34C759', fontWeight: 600, fontFamily: FONT }}>✓ Resolved</div>
+              )}
             </div>
-
-            <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 6, color: 'var(--text)' }}>{task.task}</div>
-
-            {proj && (
-              <span className="project-tag" style={{ background: proj.color + '18', borderColor: proj.color + '40', color: proj.color, marginBottom: 8, display: 'inline-flex' }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: proj.color, display: 'inline-block' }} />
-                {proj.name}
-              </span>
-            )}
-
-            <div style={{ marginTop: 8, padding: '8px 12px', background: 'var(--red-bg)', borderRadius: 'var(--r-sm)', fontSize: 13, color: '#CC2E26', borderLeft: '3px solid var(--red)' }}>
-              {task.blockers}
-            </div>
-
-            {isResolved && (
-              <div style={{ marginTop: 6, fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>✅ Resolved</div>
-            )}
           </div>
         )
       })}

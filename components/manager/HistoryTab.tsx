@@ -1,15 +1,11 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
-import { Entry, Employee, Project, ProjectTask, TaskStatus } from '@/lib/types'
+import React, { useState, useEffect, useCallback } from 'react'
+import { Entry, Employee, Project } from '@/lib/types'
+import EntryRow from './EntryRow'
 
-const STATUS_LABELS: Record<TaskStatus, string> = { in_progress: 'In Progress', completed: 'Done', blocked: 'Blocked', carried: 'Carried →' }
-const STATUS_ICONS: Record<TaskStatus, string> = { in_progress: '🔵', completed: '✅', blocked: '🚫', carried: '↩️' }
-
-function dateRange(days: number) {
-  const to = new Date().toISOString().slice(0, 10)
-  const from = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10)
-  return { from, to }
-}
+const FONT = `-apple-system, 'SF Pro Display', 'SF Pro Text', sans-serif`
+const CARD: React.CSSProperties = { background: 'white', borderRadius: 16, boxShadow: '0 1px 0 rgba(0,0,0,0.04), 0 2px 16px rgba(0,0,0,0.05)' }
+const TODAY = new Date().toISOString().slice(0, 10)
 
 function fmtDate(s: string) {
   return new Date(s + 'T12:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -19,344 +15,497 @@ function fmtShort(s: string) {
   return new Date(s + 'T12:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
 }
 
-function getWeekDates(offset = 0) {
-  const today = new Date()
-  const day = today.getDay()
-  const monday = new Date(today)
-  monday.setDate(today.getDate() - (day === 0 ? 6 : day - 1) + offset * 7)
-  return Array.from({ length: 7 }).map((_, i) => {
-    const d = new Date(monday)
-    d.setDate(monday.getDate() + i)
-    return d.toISOString().slice(0, 10)
-  })
+function parseHours(t: string) {
+  return parseFloat((t || '0').replace(/[^\d.]/g, '')) || 0
 }
 
-function TaskDisplay({ tasks, projects }: { tasks: ProjectTask[]; projects: Project[] }) {
-  if (!tasks || tasks.length === 0) return null
+function downloadCSV(entries: Entry[], projects: Project[], filename: string) {
+  const rows = [
+    ['Date', 'Employee', 'Project', 'Task', 'Status', 'Time', 'Blockers', 'Workload'].join(','),
+    ...entries.flatMap(e =>
+      (e.project_tasks || []).map(t => {
+        const proj = projects.find(p => p.id === t.project_id)
+        return [e.date, `"${e.employee_name}"`, `"${proj?.name || t.project_id || ''}"`, `"${(t.task || '').replace(/"/g, '""')}"`, t.status, t.time, `"${(t.blockers || '').replace(/"/g, '""')}"`, e.workload].join(',')
+      })
+    ),
+  ]
+  const blob = new Blob([rows.join('\n')], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = `${filename}.csv`; a.click()
+  URL.revokeObjectURL(url)
+}
+
+function StatCard({ value, label, color }: { value: string | number; label: string; color: string }) {
   return (
-    <div style={{ marginTop: 8 }}>
-      {tasks.map((t, i) => (
-        <div key={i} style={{ display: 'flex', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--border)', alignItems: 'flex-start' }}>
-          <span className={`status-chip status-${t.status}`} style={{ fontSize: 11 }}>{STATUS_ICONS[t.status]}</span>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 500 }}>{t.task}</div>
-            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 3 }}>
-              {t.project_id && (() => { const p = projects.find(x => x.id === t.project_id); return p ? <span className="project-tag" style={{ fontSize: 11, background: p.color + '18', borderColor: p.color + '40', color: p.color }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: p.color, display: 'inline-block' }} />{p.name}</span> : null })()}
-              {t.time && <span style={{ fontSize: 11, color: 'var(--text3)' }}>⏱ {t.time}h</span>}
-              <span className={`status-chip status-${t.status}`} style={{ fontSize: 11 }}>{STATUS_LABELS[t.status]}</span>
-            </div>
-            {t.blockers && <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 3 }}>🚫 {t.blockers}</div>}
+    <div style={{ ...CARD, padding: '16px 20px', textAlign: 'center' }}>
+      <div style={{ fontWeight: 700, fontSize: 24, color, fontFamily: FONT, letterSpacing: '-0.03em', lineHeight: 1 }}>{value}</div>
+      <div style={{ fontSize: 11, color: '#AEAEB2', fontFamily: FONT, marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
+    </div>
+  )
+}
+
+// ── List View ─────────────────────────────────────────────────────────────────
+function ListView({ entries, projects, employees }: { entries: Entry[]; projects: Project[]; employees: Employee[] }) {
+  const [empFilter, setEmpFilter] = useState('')
+  const filtered = empFilter ? entries.filter(e => e.employee_id === empFilter) : entries
+  const sorted = [...filtered].sort((a, b) => b.date.localeCompare(a.date) || b.timestamp.localeCompare(a.timestamp))
+  const grouped: Record<string, Entry[]> = {}
+  sorted.forEach(e => { if (!grouped[e.date]) grouped[e.date] = []; grouped[e.date].push(e) })
+  const nonMgrEmps = employees.filter(e => e.role === 'employee')
+
+  return (
+    <div>
+      <div style={{ ...CARD, padding: '14px 16px', marginBottom: 16, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <select value={empFilter} onChange={e => setEmpFilter(e.target.value)}
+          style={{ flex: 1, minWidth: 160, padding: '8px 12px', fontSize: 13, borderRadius: 8, border: 'none', background: '#F5F5F7', fontFamily: FONT, outline: 'none', color: '#1D1D1F' }}>
+          <option value="">All Employees</option>
+          {nonMgrEmps.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+        </select>
+        <button onClick={() => downloadCSV(filtered, projects, `history-${empFilter || 'all'}`)}
+          style={{ padding: '8px 16px', background: '#F5F5F7', color: '#1D1D1F', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 980, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
+          ↓ CSV
+        </button>
+      </div>
+
+      {empFilter && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(110px,1fr))', gap: 10, marginBottom: 16 }}>
+          <StatCard value={filtered.length} label="Total Days" color="#1D1D1F" />
+          <StatCard value={filtered.filter(e => e.workload === 'heavy').length} label="Heavy Days" color="#FF3B30" />
+          <StatCard value={filtered.filter(e => e.workload === 'medium').length} label="Medium Days" color="#FF9500" />
+          <StatCard value={filtered.filter(e => e.workload === 'light').length} label="Light Days" color="#34C759" />
+        </div>
+      )}
+
+      <div style={{ fontSize: 13, color: '#AEAEB2', marginBottom: 12, fontFamily: FONT }}>{filtered.length} entries</div>
+
+      {Object.keys(grouped).sort((a, b) => b.localeCompare(a)).map(date => (
+        <div key={date}>
+          <div style={{ fontWeight: 600, color: '#6E6E73', fontSize: 12, margin: '16px 0 8px', display: 'flex', alignItems: 'center', gap: 8, textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: FONT }}>
+            <span>{fmtDate(date)}</span>
+            <span style={{ color: '#AEAEB2', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>{grouped[date].length} submission{grouped[date].length !== 1 ? 's' : ''}</span>
           </div>
+          {grouped[date].map(e => <EntryRow key={e.id} entry={e} showName={!empFilter} projects={projects} />)}
         </div>
       ))}
-    </div>
-  )
-}
-
-// ── List View ──────────────────────────────────────────────────────────────
-function ListView({ entries, projects }: { entries: Entry[]; projects: Project[] }) {
-  const [filter, setFilter] = useState('')
-  const [expanded, setExpanded] = useState<string | null>(null)
-
-  const filtered = entries.filter(e => !filter || e.employee_name.toLowerCase().includes(filter.toLowerCase()))
-
-  return (
-    <div>
-      <div style={{ marginBottom: 12 }}>
-        <input type="text" placeholder="🔍 Filter by name…" value={filter} onChange={e => setFilter(e.target.value)} />
-      </div>
-      {filtered.length === 0 && (
-        <div className="empty-state">
-          <div className="empty-state-icon">📭</div>
-          <div className="empty-state-text">No entries found</div>
-        </div>
+      {sorted.length === 0 && (
+        <div style={{ ...CARD, padding: '48px 20px', textAlign: 'center', color: '#AEAEB2', fontFamily: FONT, fontSize: 14 }}>No entries in this date range.</div>
       )}
-      {filtered.map(entry => {
-        const isExpanded = expanded === entry.id
-        return (
-          <div key={entry.id} className={`entry-card ${entry.workload}`}>
-            <div style={{ display: 'flex', gap: 10, cursor: 'pointer', alignItems: 'center' }} onClick={() => setExpanded(isExpanded ? null : entry.id)}>
-              <div className="avatar" style={{ background: 'var(--blue-bg)', color: 'var(--blue)', fontSize: 12 }}>{entry.employee_name.charAt(0)}</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>{entry.employee_name}</div>
-                <div style={{ fontSize: 12, color: 'var(--text3)', display: 'flex', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
-                  <span>{fmtDate(entry.date)}</span>
-                  <span className={`badge badge-${entry.workload}`}>{entry.workload}</span>
-                  {entry.is_absent ? <span style={{ color: 'var(--text4)' }}>Absent</span> : <span>{entry.project_tasks?.length || 0} tasks</span>}
-                  {entry.submitted_by_manager && <span style={{ color: 'var(--text4)' }}>via manager</span>}
-                </div>
-              </div>
-              <span style={{ color: 'var(--text4)', fontSize: 16 }}>{isExpanded ? '▾' : '▸'}</span>
-            </div>
-            {isExpanded && !entry.is_absent && (
-              <div style={{ marginTop: 10 }}>
-                <div className="divider" />
-                <TaskDisplay tasks={entry.project_tasks} projects={projects} />
-              </div>
-            )}
-          </div>
-        )
-      })}
     </div>
   )
 }
 
-// ── Weekly View ────────────────────────────────────────────────────────────
-function WeeklyView({ entries, employees }: { entries: Entry[]; employees: Employee[] }) {
-  const [offset, setOffset] = useState(0)
-  const days = getWeekDates(offset)
-  const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-  const nonManagerEmps = employees.filter(e => e.role === 'employee')
+// ── Weekly Dashboard ──────────────────────────────────────────────────────────
+function WeeklyDashboard({ entries, projects, employees }: { entries: Entry[]; projects: Project[]; employees: Employee[] }) {
+  const nonMgrEmps = employees.filter(e => e.role === 'employee')
+  const [empId, setEmpId] = useState(nonMgrEmps[0]?.id || '')
+  const [weekStart, setWeekStart] = useState(() => {
+    const d = new Date(TODAY + 'T12:00:00')
+    const day = d.getDay()
+    d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day))
+    return d.toISOString().slice(0, 10)
+  })
+  const [selDay, setSelDay] = useState<string | null>(null)
+
+  const weekDays = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(weekStart + 'T12:00:00'); d.setDate(d.getDate() + i); return d.toISOString().slice(0, 10)
+  })
+  const weekEnd = weekDays[6]
+  const DAYNAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+  function shiftWeek(n: number) {
+    const d = new Date(weekStart + 'T12:00:00'); d.setDate(d.getDate() + n * 7); setWeekStart(d.toISOString().slice(0, 10)); setSelDay(null)
+  }
+
+  const weekEntries = entries.filter(e => e.employee_id === empId && weekDays.includes(e.date)).sort((a, b) => a.date.localeCompare(b.date))
+  const totalH = weekEntries.reduce((s, e) => s + (e.project_tasks || []).reduce((ss, t) => ss + parseHours(t.time), 0), 0)
+  const submittedDays = new Set(weekEntries.map(e => e.date)).size
+  const allTasks = weekEntries.flatMap(e => (e.project_tasks || []).filter(t => t.status))
+  const completionRate = allTasks.length ? Math.round(allTasks.filter(t => t.status === 'completed').length / allTasks.length * 100) : null
+  const projH: Record<string, number> = {}
+  weekEntries.forEach(e => (e.project_tasks || []).forEach(t => { const h = parseHours(t.time); projH[t.project_id] = (projH[t.project_id] || 0) + h }))
+  const projBreak = Object.entries(projH).sort((a, b) => b[1] - a[1])
+  const maxProjH = Math.max(...projBreak.map(([, h]) => h), 1)
+  const dayH: Record<string, number> = {}
+  weekEntries.forEach(e => { const h = (e.project_tasks || []).reduce((s, t) => s + parseHours(t.time), 0); dayH[e.date] = (dayH[e.date] || 0) + h })
+  const maxDayH = Math.max(...Object.values(dayH), 1)
+  const WL_COLOR: Record<string, string> = { heavy: '#FF3B30', medium: '#FF9500', light: '#34C759' }
+  const selDayEntry = selDay ? weekEntries.find(e => e.date === selDay) : null
+  const emp = nonMgrEmps.find(e => e.id === empId)
 
   return (
     <div>
-      <div className="flex-between" style={{ marginBottom: 16 }}>
-        <button className="btn btn-secondary btn-sm" onClick={() => setOffset(o => o - 1)}>← Prev</button>
-        <div style={{ fontSize: 14, fontWeight: 600 }}>
-          {fmtShort(days[0])} — {fmtShort(days[6])}
-          {offset === 0 && <span style={{ fontSize: 12, color: 'var(--blue)', marginLeft: 8 }}>This week</span>}
+      <div style={{ ...CARD, padding: '14px 18px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <select value={empId} onChange={e => { setEmpId(e.target.value); setSelDay(null) }}
+          style={{ flex: 1, minWidth: 160, padding: '8px 12px', fontSize: 14, borderRadius: 8, border: 'none', background: '#F5F5F7', fontFamily: FONT, outline: 'none', color: '#1D1D1F' }}>
+          {nonMgrEmps.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+        </select>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={() => shiftWeek(-1)} style={{ width: 32, height: 32, border: '1px solid rgba(0,0,0,0.1)', borderRadius: 8, background: '#F5F5F7', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT }}>‹</button>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#1D1D1F', minWidth: 160, textAlign: 'center', fontFamily: FONT }}>{fmtShort(weekStart)} – {fmtShort(weekEnd)}</span>
+          <button onClick={() => shiftWeek(1)} style={{ width: 32, height: 32, border: '1px solid rgba(0,0,0,0.1)', borderRadius: 8, background: '#F5F5F7', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT }}>›</button>
         </div>
-        <button className="btn btn-secondary btn-sm" onClick={() => setOffset(o => Math.min(0, o + 1))} disabled={offset >= 0}>Next →</button>
+        <button onClick={() => downloadCSV(weekEntries, projects, `${emp?.name || 'report'}-week-${weekStart}`)}
+          style={{ padding: '8px 14px', background: '#F5F5F7', color: '#1D1D1F', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 8, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>↓ CSV</button>
       </div>
 
-      <div className="card" style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid var(--border)' }}>
-              <th style={{ padding: '10px 14px', textAlign: 'left', color: 'var(--text3)', fontWeight: 600, whiteSpace: 'nowrap' }}>Employee</th>
-              {days.map((d, i) => (
-                <th key={d} style={{ padding: '10px 8px', textAlign: 'center', color: d === new Date().toISOString().slice(0, 10) ? 'var(--blue)' : 'var(--text3)', fontWeight: 600 }}>
-                  {dayLabels[i]}<br /><span style={{ fontSize: 11, fontWeight: 400 }}>{fmtShort(d)}</span>
-                </th>
-              ))}
-              <th style={{ padding: '10px 8px', textAlign: 'center', color: 'var(--text3)', fontWeight: 600 }}>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {nonManagerEmps.map(emp => {
-              const empEntries = Object.fromEntries(entries.filter(e => e.employee_id === emp.id).map(e => [e.date, e]))
-              const weekTotal = days.reduce((sum, d) => {
-                const e = empEntries[d]
-                return sum + (e && !e.is_absent ? (e.project_tasks?.reduce((s, t) => s + (parseFloat(t.time) || 0), 0) || 0) : 0)
-              }, 0)
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(110px,1fr))', gap: 10, marginBottom: 16 }}>
+        <StatCard value={submittedDays} label="Days Submitted" color="#1D1D1F" />
+        <StatCard value={totalH > 0 ? totalH + 'h' : '—'} label="Hours Logged" color="#6366F1" />
+        <StatCard value={completionRate !== null ? completionRate + '%' : '—'} label="Tasks Done" color="#34C759" />
+        <StatCard value={projBreak.length || '—'} label="Projects" color="#0071E3" />
+      </div>
+
+      {weekEntries.length === 0
+        ? <div style={{ ...CARD, padding: '48px 20px', textAlign: 'center', color: '#AEAEB2', fontFamily: FONT, fontSize: 14 }}>No submissions this week.</div>
+        : <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+          <div style={{ ...CARD, padding: '20px 24px' }}>
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16, fontFamily: FONT }}>Day by Day</div>
+            {weekDays.map((date, i) => {
+              const dayEntry = weekEntries.find(e => e.date === date)
+              const h = dayH[date] || 0
+              const isSelected = selDay === date
+              const color = dayEntry ? WL_COLOR[dayEntry.workload] || '#0071E3' : '#E5E5EA'
               return (
-                <tr key={emp.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                  <td style={{ padding: '10px 14px', fontWeight: 600, whiteSpace: 'nowrap' }}>{emp.name}</td>
-                  {days.map(d => {
-                    const e = empEntries[d]
-                    const isWeekend = [0, 6].includes(new Date(d + 'T12:00:00').getDay())
-                    return (
-                      <td key={d} style={{ padding: '10px 8px', textAlign: 'center' }}>
-                        {e?.is_absent ? (
-                          <span title="Absent" style={{ display: 'inline-flex', width: 24, height: 24, borderRadius: '50%', background: 'var(--border)', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>A</span>
-                        ) : e ? (
-                          <span title={`${e.workload} · ${e.project_tasks?.length || 0} tasks`}
-                            style={{ display: 'inline-flex', width: 24, height: 24, borderRadius: '50%', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700,
-                              background: e.workload === 'heavy' ? 'var(--red)' : e.workload === 'medium' ? 'var(--orange)' : 'var(--green)', color: 'white' }}>
-                            {e.project_tasks?.length || '✓'}
-                          </span>
-                        ) : isWeekend ? (
-                          <span style={{ fontSize: 11, color: 'var(--border)' }}>—</span>
-                        ) : (
-                          <span style={{ display: 'inline-flex', width: 24, height: 24, borderRadius: '50%', background: 'var(--border)' }} />
-                        )}
-                      </td>
-                    )
-                  })}
-                  <td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 600, color: weekTotal > 0 ? 'var(--blue)' : 'var(--text4)', fontSize: 12 }}>
-                    {weekTotal > 0 ? `${weekTotal.toFixed(1)}h` : '—'}
-                  </td>
-                </tr>
+                <div key={date} onClick={() => { if (dayEntry) setSelDay(isSelected ? null : date) }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, cursor: dayEntry ? 'pointer' : 'default', opacity: i >= 5 && !dayEntry ? 0.35 : 1 }}>
+                  <div style={{ width: 32, fontSize: 12, fontWeight: isSelected ? 700 : 500, color: isSelected ? '#0071E3' : '#6E6E73', flexShrink: 0, fontFamily: FONT }}>{DAYNAMES[i]}</div>
+                  <div style={{ flex: 1, height: 8, background: '#F2F2F7', borderRadius: 9999, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: dayEntry ? `${Math.max(4, (h / maxDayH) * 100)}%` : '0%', background: isSelected ? '#0071E3' : color, borderRadius: 9999, transition: 'width 0.3s' }} />
+                  </div>
+                  <div style={{ width: 30, textAlign: 'right', fontSize: 12, color: h > 0 ? '#1D1D1F' : '#AEAEB2', fontWeight: h > 0 ? 600 : 400, flexShrink: 0, fontFamily: FONT }}>{h > 0 ? h + 'h' : '—'}</div>
+                </div>
               )
             })}
-          </tbody>
-        </table>
-      </div>
+          </div>
+          <div style={{ ...CARD, padding: '20px 24px' }}>
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16, fontFamily: FONT }}>Project Time</div>
+            {projBreak.length === 0
+              ? <div style={{ color: '#AEAEB2', fontSize: 13, textAlign: 'center', paddingTop: 20, fontFamily: FONT }}>No hours logged.</div>
+              : projBreak.map(([pid, hrs]) => {
+                const proj = projects.find(p => p.id === pid)
+                const color = proj?.color || '#AEAEB2'
+                const name = pid === '__other__' ? 'Other Work' : (proj?.name || pid)
+                return (
+                  <div key={pid} style={{ marginBottom: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 5, fontFamily: FONT }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, display: 'inline-block' }} />
+                        <span style={{ fontWeight: 500 }}>{name}</span>
+                      </span>
+                      <span style={{ color: '#6E6E73', fontWeight: 600 }}>{hrs > 0 ? hrs + 'h' : '—'}</span>
+                    </div>
+                    <div style={{ height: 5, background: '#F2F2F7', borderRadius: 9999, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${(hrs / maxProjH) * 100}%`, background: color, borderRadius: 9999 }} />
+                    </div>
+                  </div>
+                )
+              })
+            }
+          </div>
+        </div>
+      }
 
-      <div style={{ display: 'flex', gap: 12, marginTop: 10, fontSize: 12, color: 'var(--text3)', flexWrap: 'wrap' }}>
-        {[['var(--green)', 'Light'], ['var(--orange)', 'Medium'], ['var(--red)', 'Heavy']].map(([c, l]) => (
-          <span key={l} style={{ display: 'flex', gap: 4, alignItems: 'center' }}><span style={{ width: 12, height: 12, borderRadius: '50%', background: c, display: 'inline-block' }} /> {l}</span>
-        ))}
-        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}><span style={{ width: 12, height: 12, borderRadius: '50%', background: 'var(--border)', display: 'inline-block' }} /> A = Absent</span>
-      </div>
+      {selDay && selDayEntry && (
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#6E6E73', marginBottom: 12, fontFamily: FONT }}>
+            {new Date(selDay + 'T12:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long' })}
+          </div>
+          <EntryRow entry={selDayEntry} showName={false} projects={projects} />
+        </div>
+      )}
     </div>
   )
 }
 
-// ── People View ────────────────────────────────────────────────────────────
-function PeopleView({ entries, employees, projects }: { entries: Entry[]; employees: Employee[]; projects: Project[] }) {
-  const [selectedEmp, setSelectedEmp] = useState<string>('')
-  const nonManagerEmps = employees.filter(e => e.role === 'employee')
-  const empId = selectedEmp || nonManagerEmps[0]?.id || ''
-  const empEntries = entries.filter(e => e.employee_id === empId)
-  const today = new Date().toISOString().slice(0, 10)
+// ── People Dashboard ──────────────────────────────────────────────────────────
+function PeopleDashboard({ entries, projects, employees }: { entries: Entry[]; projects: Project[]; employees: Employee[] }) {
+  const nonMgrEmps = employees.filter(e => e.role === 'employee')
+  const [empId, setEmpId] = useState(nonMgrEmps[0]?.id || '')
+  const [period, setPeriod] = useState('month')
 
-  const submitted = empEntries.filter(e => !e.is_absent)
-  const allTasks = submitted.flatMap(e => e.project_tasks || [])
-  const totalHours = allTasks.reduce((s, t) => s + (parseFloat(t.time) || 0), 0)
-  const completedTasks = allTasks.filter(t => t.status === 'completed').length
-  const completionRate = allTasks.length > 0 ? Math.round((completedTasks / allTasks.length) * 100) : 0
+  const pStart = (() => {
+    const d = new Date(TODAY + 'T12:00:00')
+    if (period === 'week') { const dow = d.getDay(); d.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1)) }
+    else if (period === 'month') { d.setDate(1) }
+    else if (period === '3m') { d.setMonth(d.getMonth() - 3) }
+    else return '2020-01-01'
+    return d.toISOString().slice(0, 10)
+  })()
 
-  const projectHours: Record<string, number> = {}
-  allTasks.forEach(t => { if (t.project_id) projectHours[t.project_id] = (projectHours[t.project_id] || 0) + (parseFloat(t.time) || 0) })
-  const topProjects = Object.entries(projectHours).sort((a, b) => b[1] - a[1]).slice(0, 5)
-  const maxHrs = topProjects[0]?.[1] || 1
+  const myE = entries.filter(e => e.employee_id === empId && !e.is_absent && e.date >= pStart && e.date <= TODAY)
+  const absentE = entries.filter(e => e.employee_id === empId && e.is_absent && e.date >= pStart && e.date <= TODAY)
+
+  function workingDays(s: string, end: string) {
+    let c = 0; const d = new Date(s + 'T12:00:00'); const e = new Date(end + 'T12:00:00')
+    while (d <= e) { if (d.getDay() !== 0 && d.getDay() !== 6) c++; d.setDate(d.getDate() + 1) }
+    return c
+  }
+
+  const wDays = workingDays(pStart, TODAY)
+  const submDays = new Set(myE.map(e => e.date)).size
+  const absDays = new Set(absentE.map(e => e.date)).size
+  const submRate = wDays > 0 ? Math.round(submDays / wDays * 100) : 0
+  const totalH = myE.reduce((s, e) => s + (e.project_tasks || []).reduce((ss, t) => ss + parseHours(t.time), 0), 0)
+  const allTasks = myE.flatMap(e => (e.project_tasks || []).filter(t => t.status))
+  const doneTasks = allTasks.filter(t => t.status === 'completed').length
+  const completionRate = allTasks.length ? Math.round(doneTasks / allTasks.length * 100) : null
+  const wlC = { heavy: myE.filter(e => e.workload === 'heavy').length, medium: myE.filter(e => e.workload === 'medium').length, light: myE.filter(e => e.workload === 'light').length }
+  const projH: Record<string, number> = {}
+  const projDone: Record<string, number> = {}
+  const projTotal: Record<string, number> = {}
+  myE.forEach(e => (e.project_tasks || []).forEach(t => {
+    const h = parseHours(t.time); projH[t.project_id] = (projH[t.project_id] || 0) + h
+    if (t.status) { projTotal[t.project_id] = (projTotal[t.project_id] || 0) + 1; if (t.status === 'completed') projDone[t.project_id] = (projDone[t.project_id] || 0) + 1 }
+  }))
+  const projBreak = Object.entries(projH).sort((a, b) => b[1] - a[1])
+  const PERIODS = [['week', 'This Week'], ['month', 'This Month'], ['3m', '3 Months'], ['all', 'All Time']]
+  const rateColor = submRate >= 80 ? '#34C759' : submRate >= 60 ? '#FF9500' : '#FF3B30'
+  const SEC: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: '#AEAEB2', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10, marginTop: 20, fontFamily: FONT }
 
   return (
     <div>
-      <div style={{ marginBottom: 16 }}>
-        <select value={empId} onChange={e => setSelectedEmp(e.target.value)}>
-          {nonManagerEmps.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+        <select value={empId} onChange={e => setEmpId(e.target.value)}
+          style={{ flex: 1, minWidth: 180, padding: '9px 12px', fontSize: 14, borderRadius: 8, border: 'none', background: '#F2F2F7', fontFamily: FONT, outline: 'none', color: '#1D1D1F', fontWeight: 600 }}>
+          {nonMgrEmps.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
         </select>
-      </div>
-
-      <div className="stat-grid">
-        <div className="stat-card"><div className="stat-value" style={{ color: 'var(--blue)' }}>{submitted.length}</div><div className="stat-label">Days Submitted</div></div>
-        <div className="stat-card"><div className="stat-value" style={{ color: 'var(--green)' }}>{totalHours.toFixed(1)}h</div><div className="stat-label">Total Hours</div></div>
-        <div className="stat-card"><div className="stat-value" style={{ color: 'var(--orange)' }}>{completionRate}%</div><div className="stat-label">Completion Rate</div></div>
-        <div className="stat-card"><div className="stat-value" style={{ color: 'var(--red)' }}>{empEntries.filter(e => e.is_absent).length}</div><div className="stat-label">Days Absent</div></div>
-      </div>
-
-      {/* 30-day heatmap */}
-      <div className="card card-p" style={{ marginBottom: 12 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>Last 30 Days</div>
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-          {Array.from({ length: 30 }).map((_, i) => {
-            const d = new Date(Date.now() - (29 - i) * 86400000).toISOString().slice(0, 10)
-            const e = empEntries.find(x => x.date === d)
-            const isWeekend = [0, 6].includes(new Date(d + 'T12:00:00').getDay())
-            return (
-              <div key={d} title={d} style={{ width: 20, height: 20, borderRadius: 4, background: e?.is_absent ? 'var(--red-bg)' : e ? (e.workload === 'heavy' ? 'var(--red)' : e.workload === 'medium' ? 'var(--orange)' : 'var(--green)') : isWeekend ? 'var(--bg)' : 'var(--border)', border: d === today ? '2px solid var(--blue)' : 'none' }} />
-            )
-          })}
+        <div style={{ display: 'flex', gap: 3, background: '#F2F2F7', borderRadius: 10, padding: 3 }}>
+          {PERIODS.map(([id, label]) => (
+            <button key={id} onClick={() => setPeriod(id)}
+              style={{ padding: '7px 12px', borderRadius: 7, border: 'none', cursor: 'pointer', background: period === id ? 'white' : 'transparent', color: period === id ? '#1D1D1F' : '#6E6E73', fontWeight: period === id ? 600 : 400, fontSize: 13, fontFamily: FONT, boxShadow: period === id ? '0 1px 4px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.12s', whiteSpace: 'nowrap' }}>
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {topProjects.length > 0 && (
-        <div className="card card-p" style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>Project Breakdown</div>
-          {topProjects.map(([pid, hrs]) => {
-            const p = projects.find(x => x.id === pid)
-            return (
-              <div key={pid} style={{ marginBottom: 10 }}>
-                <div className="flex-between" style={{ marginBottom: 4 }}>
-                  <span style={{ fontSize: 13, fontWeight: 500 }}>{p?.name || pid}</span>
-                  <span style={{ fontSize: 12, color: 'var(--text3)' }}>{hrs.toFixed(1)}h</span>
+      {myE.length === 0 && absDays === 0
+        ? <div style={{ ...CARD, padding: '48px 20px', textAlign: 'center', color: '#AEAEB2', fontFamily: FONT, fontSize: 14 }}>No submissions in this period.</div>
+        : <>
+          <div style={SEC}>Reliability</div>
+          <div style={{ ...CARD, padding: '18px 20px', marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: 28, fontWeight: 700, color: '#1D1D1F', letterSpacing: '-0.03em', lineHeight: 1, fontFamily: FONT }}>
+                  {submDays}<span style={{ fontSize: 16, color: '#AEAEB2', fontWeight: 400 }}>/{wDays}</span>
                 </div>
-                <div style={{ height: 5, background: 'var(--border)', borderRadius: 3 }}>
-                  <div style={{ height: '100%', width: `${(hrs / maxHrs) * 100}%`, background: p?.color || 'var(--blue)', borderRadius: 3 }} />
+                <div style={{ fontSize: 12, color: '#6E6E73', marginTop: 4, fontFamily: FONT }}>
+                  days submitted <span style={{ marginLeft: 6, fontWeight: 600, color: rateColor }}>{submRate}%</span>
                 </div>
               </div>
-            )
-          })}
-        </div>
-      )}
-
-      <div>
-        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>Recent Entries</div>
-        {empEntries.slice(0, 7).map(entry => (
-          <div key={entry.id} className={`entry-card ${entry.workload}`} style={{ marginBottom: 8 }}>
-            <div className="flex-between" style={{ marginBottom: entry.is_absent ? 0 : 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>{fmtDate(entry.date)}</span>
-              {entry.is_absent ? <span style={{ fontSize: 12, color: 'var(--text4)' }}>Absent</span> : <span className={`badge badge-${entry.workload}`}>{entry.workload}</span>}
+              {absDays > 0 && (
+                <div style={{ padding: '8px 14px', background: 'rgba(255,149,0,0.08)', borderRadius: 10, border: '1px solid rgba(255,149,0,0.2)' }}>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: '#B25900', letterSpacing: '-0.03em', lineHeight: 1, fontFamily: FONT }}>{absDays}</div>
+                  <div style={{ fontSize: 12, color: '#B25900', marginTop: 3, fontFamily: FONT }}>absent day{absDays !== 1 ? 's' : ''}</div>
+                </div>
+              )}
+              <div style={{ flex: 1, minWidth: 150 }}>
+                <div style={{ height: 8, background: '#F2F2F7', borderRadius: 9999, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: submRate + '%', background: rateColor, borderRadius: 9999, transition: 'width 0.4s' }} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#AEAEB2', marginTop: 4, fontFamily: FONT }}>
+                  <span>{fmtShort(pStart)}</span><span>{fmtShort(TODAY)}</span>
+                </div>
+              </div>
             </div>
-            {!entry.is_absent && <TaskDisplay tasks={entry.project_tasks} projects={projects} />}
           </div>
-        ))}
-        {empEntries.length === 0 && <div className="empty-state"><div className="empty-state-text">No entries in this date range</div></div>}
-      </div>
+
+          <div style={SEC}>Output</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+            <div style={{ ...CARD, padding: '18px 20px' }}>
+              <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ fontSize: 28, fontWeight: 700, color: '#6366F1', letterSpacing: '-0.03em', lineHeight: 1, fontFamily: FONT }}>{totalH > 0 ? totalH + 'h' : '—'}</div>
+                  <div style={{ fontSize: 12, color: '#6E6E73', marginTop: 4, fontFamily: FONT }}>hours logged</div>
+                </div>
+                {completionRate !== null && (
+                  <div>
+                    <div style={{ fontSize: 28, fontWeight: 700, color: '#1D1D1F', letterSpacing: '-0.03em', lineHeight: 1, fontFamily: FONT }}>{completionRate}%</div>
+                    <div style={{ fontSize: 12, color: '#6E6E73', marginTop: 4, fontFamily: FONT }}>tasks completed</div>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div style={{ ...CARD, padding: '18px 20px' }}>
+              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12, fontFamily: FONT }}>Workload Mix</div>
+              {[{ l: 'Heavy', c: '#FF3B30', n: wlC.heavy }, { l: 'Medium', c: '#FF9500', n: wlC.medium }, { l: 'Light', c: '#34C759', n: wlC.light }].map(row => {
+                const pct = submDays ? Math.round(row.n / submDays * 100) : 0
+                return (
+                  <div key={row.l} style={{ marginBottom: 9 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3, fontFamily: FONT }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: row.c, display: 'inline-block' }} />{row.l}
+                      </span>
+                      <span style={{ fontWeight: 600, color: row.c }}>{row.n} <span style={{ color: '#AEAEB2', fontWeight: 400 }}>({pct}%)</span></span>
+                    </div>
+                    <div style={{ height: 5, background: '#F2F2F7', borderRadius: 9999, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: pct + '%', background: row.c, borderRadius: 9999 }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {projBreak.length > 0 && (
+            <>
+              <div style={SEC}>Projects</div>
+              <div style={{ ...CARD, overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, fontFamily: FONT }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+                      {['Project', 'Hours', 'Done'].map(h => (
+                        <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#AEAEB2', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {projBreak.map(([pid, hrs]) => {
+                      const proj = projects.find(p => p.id === pid)
+                      const color = proj?.color || '#AEAEB2'
+                      const name = pid === '__other__' ? 'Other Work' : (proj?.name || pid)
+                      const total = projTotal[pid] || 0
+                      const done = projDone[pid] || 0
+                      const doneRate = total ? Math.round(done / total * 100) : null
+                      return (
+                        <tr key={pid} style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+                          <td style={{ padding: '12px 16px' }}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0, display: 'inline-block' }} />
+                              <span style={{ fontWeight: 500 }}>{name}</span>
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px 16px', fontWeight: 600, color: '#1D1D1F' }}>{hrs > 0 ? hrs + 'h' : '—'}</td>
+                          <td style={{ padding: '12px 16px' }}>
+                            {doneRate !== null
+                              ? <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <div style={{ width: 48, height: 4, background: '#F2F2F7', borderRadius: 9999, overflow: 'hidden', flexShrink: 0 }}>
+                                  <div style={{ height: '100%', width: doneRate + '%', background: color, borderRadius: 9999 }} />
+                                </div>
+                                <span style={{ fontSize: 12, color: '#6E6E73' }}>{done}/{total}</span>
+                              </div>
+                              : '—'
+                            }
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </>
+      }
     </div>
   )
 }
 
-// ── Calendar View ──────────────────────────────────────────────────────────
-function CalendarView({ entries }: { entries: Entry[] }) {
-  const [monthOffset, setMonthOffset] = useState(0)
-  const [selectedDay, setSelectedDay] = useState<string | null>(null)
+// ── Calendar View ─────────────────────────────────────────────────────────────
+function CalendarView({ entries, projects, employees }: { entries: Entry[]; projects: Project[]; employees: Employee[] }) {
+  const now = new Date(TODAY + 'T12:00:00')
+  const [vY, setVY] = useState(now.getFullYear())
+  const [vM, setVM] = useState(now.getMonth())
+  const [sel, setSel] = useState(TODAY)
+  const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
-  const now = new Date()
-  const month = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1)
-  const monthYear = month.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
-  const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate()
-  const firstDayOfWeek = (new Date(month.getFullYear(), month.getMonth(), 1).getDay() + 6) % 7
-  const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-  const today = new Date().toISOString().slice(0, 10)
+  function prevM() { if (vM === 0) { setVM(11); setVY(y => y - 1) } else setVM(m => m - 1) }
+  function nextM() { if (vM === 11) { setVM(0); setVY(y => y + 1) } else setVM(m => m + 1) }
+
+  const fd = new Date(vY, vM, 1).getDay()
+  const dim = new Date(vY, vM + 1, 0).getDate()
+  const cells: (number | null)[] = []
+  for (let i = 0; i < fd; i++) cells.push(null)
+  for (let d = 1; d <= dim; d++) cells.push(d)
+  while (cells.length % 7 !== 0) cells.push(null)
+
+  function ds(d: number) { return `${vY}-${String(vM + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}` }
 
   const entryByDate: Record<string, Entry[]> = {}
   entries.forEach(e => { if (!entryByDate[e.date]) entryByDate[e.date] = []; entryByDate[e.date].push(e) })
 
-  const selectedEntries = selectedDay ? entryByDate[selectedDay] || [] : []
+  function dots(d: number) {
+    if (!d) return []
+    const de = entryByDate[ds(d)] || []
+    const r: string[] = []
+    if (de.some(e => e.workload === 'heavy')) r.push('#FF3B30')
+    if (de.some(e => e.workload === 'medium')) r.push('#FF9500')
+    if (de.some(e => e.workload === 'light')) r.push('#34C759')
+    return r
+  }
+
+  const selEntries = (entryByDate[sel] || []).sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+  const selDateStr = sel ? new Date(sel + 'T12:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }) : ''
+  const nonMgrEmps = employees.filter(e => e.role === 'employee')
+  const submittedIds = new Set(selEntries.map(e => e.employee_id))
+  const missingEmps = nonMgrEmps.filter(e => !submittedIds.has(e.id))
 
   return (
-    <div>
-      <div className="flex-between" style={{ marginBottom: 16 }}>
-        <button className="btn btn-secondary btn-sm" onClick={() => { setMonthOffset(o => o - 1); setSelectedDay(null) }}>← Prev</button>
-        <span style={{ fontSize: 15, fontWeight: 700 }}>{monthYear}</span>
-        <button className="btn btn-secondary btn-sm" onClick={() => { setMonthOffset(o => Math.min(0, o + 1)); setSelectedDay(null) }} disabled={monthOffset >= 0}>Next →</button>
-      </div>
-
-      <div className="card card-p">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4, marginBottom: 6 }}>
-          {dayLabels.map(d => <div key={d} style={{ textAlign: 'center', fontSize: 11, fontWeight: 600, color: 'var(--text3)', padding: '4px 0' }}>{d}</div>)}
+    <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 16, alignItems: 'start' }}>
+      <div style={{ ...CARD, padding: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <button onClick={prevM} style={{ width: 32, height: 32, border: '1px solid rgba(0,0,0,0.1)', borderRadius: 8, background: '#F5F5F7', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT }}>‹</button>
+          <span style={{ fontWeight: 700, fontSize: 15, fontFamily: FONT }}>{MONTHS[vM]} {vY}</span>
+          <button onClick={nextM} style={{ width: 32, height: 32, border: '1px solid rgba(0,0,0,0.1)', borderRadius: 8, background: '#F5F5F7', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT }}>›</button>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4 }}>
-          {Array.from({ length: firstDayOfWeek }).map((_, i) => <div key={`e${i}`} />)}
-          {Array.from({ length: daysInMonth }).map((_, i) => {
-            const day = i + 1
-            const dateStr = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-            const dayEntries = entryByDate[dateStr] || []
-            const isSelected = dateStr === selectedDay
-            const isToday = dateStr === today
-            const workloads = dayEntries.filter(e => !e.is_absent).map(e => e.workload)
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', marginBottom: 4 }}>
+          {DAYS.map(d => <div key={d} style={{ textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#AEAEB2', padding: '4px 0', fontFamily: FONT }}>{d}</div>)}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2 }}>
+          {cells.map((d, i) => {
+            if (!d) return <div key={'b' + i} />
+            const dStr = ds(d)
+            const isToday = dStr === TODAY
+            const isSel = dStr === sel
+            const dt = dots(d)
+            const hasE = dt.length > 0
             return (
-              <div key={dateStr} onClick={() => setSelectedDay(isSelected ? null : dateStr)}
-                style={{ aspectRatio: '1', borderRadius: 8, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: dayEntries.length > 0 ? 'pointer' : 'default', padding: 2,
-                  border: isSelected ? '2px solid var(--blue)' : isToday ? '2px solid rgba(0,122,255,0.4)' : '2px solid transparent',
-                  background: isSelected ? 'var(--blue-bg)' : dayEntries.length > 0 ? 'var(--bg)' : 'transparent' }}>
-                <span style={{ fontSize: 12, fontWeight: isToday ? 700 : 400, color: isToday ? 'var(--blue)' : 'var(--text)' }}>{day}</span>
-                {dayEntries.length > 0 && (
-                  <div style={{ display: 'flex', gap: 2, marginTop: 2 }}>
-                    {workloads.includes('heavy') && <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--red)' }} />}
-                    {workloads.includes('medium') && <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--orange)' }} />}
-                    {workloads.includes('light') && <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--green)' }} />}
-                  </div>
-                )}
+              <div key={dStr} onClick={() => setSel(dStr)}
+                style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '6px 2px', borderRadius: 8, background: isSel ? '#0071E3' : isToday ? 'rgba(0,113,227,0.08)' : hasE ? '#F5F5F7' : 'transparent', border: isToday && !isSel ? '1.5px solid #0071E3' : '1.5px solid transparent', transition: 'background .12s' }}>
+                <span style={{ fontSize: 12, fontWeight: isToday || isSel ? 700 : 400, color: isSel ? 'white' : isToday ? '#0071E3' : '#1D1D1F', lineHeight: 1, fontFamily: FONT }}>{d}</span>
+                <div style={{ display: 'flex', gap: 2, marginTop: 3, height: 5 }}>
+                  {dt.map((c, j) => <div key={j} style={{ width: 4, height: 4, borderRadius: '50%', background: isSel ? 'rgba(255,255,255,0.7)' : c }} />)}
+                </div>
               </div>
             )
           })}
         </div>
+        <div style={{ display: 'flex', gap: 10, marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(0,0,0,0.06)', justifyContent: 'center' }}>
+          {[['#FF3B30', 'Heavy'], ['#FF9500', 'Medium'], ['#34C759', 'Light']].map(([c, l]) => (
+            <span key={l} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#6E6E73', fontFamily: FONT }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: c, display: 'inline-block' }} />{l}
+            </span>
+          ))}
+        </div>
       </div>
 
-      {selectedDay && (
-        <div style={{ marginTop: 12 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>{fmtDate(selectedDay)} — {selectedEntries.length} submission{selectedEntries.length !== 1 ? 's' : ''}</div>
-          {selectedEntries.length === 0
-            ? <div className="card card-p" style={{ color: 'var(--text4)', fontSize: 14 }}>No submissions on this day.</div>
-            : selectedEntries.map(e => (
-              <div key={e.id} className={`entry-card ${e.workload}`} style={{ marginBottom: 8 }}>
-                <div className="flex-between">
-                  <span style={{ fontWeight: 600, fontSize: 14 }}>{e.employee_name}</span>
-                  {e.is_absent ? <span style={{ fontSize: 12, color: 'var(--text4)' }}>Absent</span> : <span className={`badge badge-${e.workload}`}>{e.workload}</span>}
-                </div>
-                {!e.is_absent && e.project_tasks?.length > 0 && (
-                  <div style={{ marginTop: 4, fontSize: 13, color: 'var(--text3)' }}>{e.project_tasks.length} task{e.project_tasks.length !== 1 ? 's' : ''} logged</div>
-                )}
-              </div>
-            ))
-          }
+      <div>
+        <div style={{ ...CARD, padding: '16px 20px', marginBottom: 12 }}>
+          <div style={{ fontWeight: 700, fontSize: 15, letterSpacing: '-0.02em', fontFamily: FONT }}>{selDateStr}</div>
+          <div style={{ fontSize: 12, color: '#6E6E73', marginTop: 2, fontFamily: FONT }}>
+            {selEntries.length === 0 ? 'No submissions' : `${selEntries.length} submission${selEntries.length > 1 ? 's' : ''}`}
+            {missingEmps.length > 0 && <span style={{ color: '#FF9500', fontWeight: 500 }}> · {missingEmps.length} not submitted</span>}
+            {missingEmps.length === 0 && selEntries.length > 0 && <span style={{ color: '#34C759', fontWeight: 600 }}> · All submitted</span>}
+          </div>
         </div>
-      )}
+        {selEntries.length === 0
+          ? <div style={{ ...CARD, padding: '48px 20px', textAlign: 'center', color: '#AEAEB2', fontFamily: FONT, fontSize: 14 }}>No submissions for this date.</div>
+          : selEntries.map(e => <EntryRow key={e.id} entry={e} showName projects={projects} />)
+        }
+      </div>
     </div>
   )
 }
 
-// ── Main ───────────────────────────────────────────────────────────────────
+// ── Main ──────────────────────────────────────────────────────────────────────
 type View = 'list' | 'weekly' | 'people' | 'calendar'
 
 export default function HistoryTab() {
   const [view, setView] = useState<View>('list')
-  const [from, setFrom] = useState(dateRange(30).from)
-  const [to, setTo] = useState(dateRange(30).to)
+  const [from, setFrom] = useState(() => new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10))
+  const [to, setTo] = useState(TODAY)
   const [entries, setEntries] = useState<Entry[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
   const [projects, setProjects] = useState<Project[]>([])
@@ -378,36 +527,60 @@ export default function HistoryTab() {
 
   useEffect(() => { load() }, [load])
 
+  function setRange(days: number) {
+    setTo(TODAY)
+    setFrom(new Date(Date.now() - days * 86400000).toISOString().slice(0, 10))
+  }
+
+  const VIEWS: { id: View; label: string }[] = [
+    { id: 'list', label: 'List' },
+    { id: 'weekly', label: 'Weekly' },
+    { id: 'people', label: 'People' },
+    { id: 'calendar', label: 'Calendar' },
+  ]
+
   return (
     <div>
-      {/* Date range */}
-      <div style={{ background: 'var(--card)', borderRadius: 'var(--r-md)', padding: 14, marginBottom: 16, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', boxShadow: 'var(--shadow)' }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flex: 1, minWidth: 220 }}>
-          <input type="date" value={from} onChange={e => setFrom(e.target.value)} style={{ flex: 1 }} />
-          <span style={{ color: 'var(--text3)', fontSize: 13 }}>to</span>
-          <input type="date" value={to} onChange={e => setTo(e.target.value)} style={{ flex: 1 }} />
-        </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {[{ label: '7d', days: 7 }, { label: '30d', days: 30 }, { label: '90d', days: 90 }].map(p => (
-            <button key={p.label} className="btn btn-secondary btn-sm" onClick={() => { setFrom(dateRange(p.days).from); setTo(dateRange(p.days).to) }}>{p.label}</button>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ fontWeight: 700, fontSize: 22, color: '#1D1D1F', fontFamily: FONT, letterSpacing: '-0.02em' }}>History</div>
+        <div style={{ display: 'flex', gap: 3, background: '#F2F2F7', borderRadius: 10, padding: 3 }}>
+          {VIEWS.map(v => (
+            <button key={v.id} onClick={() => setView(v.id)}
+              style={{ padding: '6px 14px', borderRadius: 7, border: 'none', cursor: 'pointer', background: view === v.id ? 'white' : 'transparent', color: view === v.id ? '#1D1D1F' : '#6E6E73', fontWeight: view === v.id ? 600 : 400, fontSize: 13, fontFamily: FONT, boxShadow: view === v.id ? '0 1px 4px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.15s' }}>
+              {v.label}
+            </button>
           ))}
         </div>
       </div>
 
-      {/* Sub-view tabs */}
-      <div className="sub-tab-bar">
-        {[{ id: 'list', label: '📋 List' }, { id: 'weekly', label: '📅 Weekly' }, { id: 'people', label: '👤 People' }, { id: 'calendar', label: '🗓 Calendar' }].map(v => (
-          <button key={v.id} className={`sub-tab-btn ${view === v.id ? 'active' : ''}`} onClick={() => setView(v.id as View)}>{v.label}</button>
-        ))}
-      </div>
+      {/* Date range (for list view) */}
+      {view === 'list' && (
+        <div style={{ background: 'white', borderRadius: 12, padding: '12px 16px', marginBottom: 16, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', boxShadow: '0 1px 0 rgba(0,0,0,0.04), 0 2px 16px rgba(0,0,0,0.05)' }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flex: 1, minWidth: 220 }}>
+            <input type="date" value={from} onChange={e => setFrom(e.target.value)} style={{ flex: 1, padding: '7px 10px', borderRadius: 8, border: 'none', background: '#F5F5F7', fontSize: 13, fontFamily: FONT, outline: 'none' }} />
+            <span style={{ color: '#AEAEB2', fontSize: 13, fontFamily: FONT }}>to</span>
+            <input type="date" value={to} onChange={e => setTo(e.target.value)} style={{ flex: 1, padding: '7px 10px', borderRadius: 8, border: 'none', background: '#F5F5F7', fontSize: 13, fontFamily: FONT, outline: 'none' }} />
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {[{ label: '7d', days: 7 }, { label: '30d', days: 30 }, { label: '90d', days: 90 }].map(p => (
+              <button key={p.label} onClick={() => setRange(p.days)}
+                style={{ padding: '6px 12px', background: '#F5F5F7', color: '#6E6E73', border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {loading
-        ? <div className="empty-state"><div className="spinner" style={{ width: 28, height: 28, margin: '0 auto' }} /></div>
+        ? <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
+          <div style={{ width: 28, height: 28, border: '3px solid #F2F2F7', borderTopColor: '#0071E3', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        </div>
         : <>
-          {view === 'list' && <ListView entries={entries} projects={projects} />}
-          {view === 'weekly' && <WeeklyView entries={entries} employees={employees} />}
-          {view === 'people' && <PeopleView entries={entries} employees={employees} projects={projects} />}
-          {view === 'calendar' && <CalendarView entries={entries} />}
+          {view === 'list' && <ListView entries={entries} projects={projects} employees={employees} />}
+          {view === 'weekly' && <WeeklyDashboard entries={entries} projects={projects} employees={employees} />}
+          {view === 'people' && <PeopleDashboard entries={entries} projects={projects} employees={employees} />}
+          {view === 'calendar' && <CalendarView entries={entries} projects={projects} employees={employees} />}
         </>
       }
     </div>
