@@ -65,9 +65,12 @@ export default function SettingsTab() {
   async function clearAllData() {
     if (!confirm('⚠️ Permanently delete ALL work entries? Employee accounts are kept.\n\nAre you sure?')) return
     const res = await fetch(`/api/entries?from=2020-01-01&to=2099-12-31`)
+    if (!res.ok) { alert('Failed to load entries. No data deleted.'); return }
     const data = await res.json()
-    await Promise.all((data.entries || []).map((e: { id: string }) => fetch(`/api/entries?id=${e.id}`, { method: 'DELETE' })))
-    alert('All entries cleared.')
+    const ids: { id: string }[] = data.entries || []
+    if (ids.length === 0) { alert('No entries found.'); return }
+    await Promise.all(ids.map(e => fetch(`/api/entries?id=${e.id}`, { method: 'DELETE' })))
+    alert(`Cleared ${ids.length} entries.`)
     load()
   }
 

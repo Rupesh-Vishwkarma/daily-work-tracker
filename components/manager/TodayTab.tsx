@@ -1,10 +1,9 @@
 'use client'
 import React, { useState, useEffect, useCallback } from 'react'
 import { Entry, Employee, Project, ProjectTask, Workload, Session, Comment } from '@/lib/types'
+import { FONT, CARD } from '@/lib/ui'
 import EntryRow from './EntryRow'
 
-const FONT = `-apple-system, 'SF Pro Display', 'SF Pro Text', sans-serif`
-const CARD: React.CSSProperties = { background: 'white', borderRadius: 16, boxShadow: '0 1px 0 rgba(0,0,0,0.04), 0 2px 16px rgba(0,0,0,0.05)' }
 const TODAY = () => new Date().toISOString().slice(0, 10)
 
 function emptyMgrTask(): { uid: number; project_id: string; task: string; time: string; status: 'in_progress' | 'completed' | 'blocked' | 'carried'; blockers: string } {
@@ -139,7 +138,7 @@ export default function TodayTab({ managerSession }: { managerSession: Session }
   }
 
   async function handleAddComment(entryId: string, text: string) {
-    await fetch('/api/comments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entry_id: entryId, text }) })
+    await fetch('/api/comments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entry_id: entryId, text, author: 'manager' }) })
     const res = await fetch(`/api/comments?entry_id=${entryId}`)
     const d = await res.json()
     setComments(prev => ({ ...prev, [entryId]: d.comments || [] }))
@@ -156,10 +155,11 @@ export default function TodayTab({ managerSession }: { managerSession: Session }
   }
 
   async function markAbsent(emp: Employee) {
-    await fetch('/api/entries', {
+    const res = await fetch('/api/entries', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ employee_id: emp.id, employee_name: emp.name, date: TODAY(), workload: 'light', is_absent: true, project_tasks: [], submitted_by_manager: true })
     })
+    if (!res.ok) { const d = await res.json(); alert(d.error || 'Failed to mark absent.'); return }
     load()
   }
 

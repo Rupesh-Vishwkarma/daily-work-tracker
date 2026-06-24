@@ -1,10 +1,7 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Entry, Project } from '@/lib/types'
-
-const FONT = `-apple-system, 'SF Pro Display', 'SF Pro Text', sans-serif`
-const CARD: React.CSSProperties = { background: 'white', borderRadius: 16, boxShadow: '0 1px 0 rgba(0,0,0,0.04), 0 2px 16px rgba(0,0,0,0.05)' }
-import React from 'react'
+import { FONT, CARD } from '@/lib/ui'
 
 function fmtDate(s: string) {
   return new Date(s + 'T12:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })

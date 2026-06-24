@@ -1,9 +1,7 @@
 'use client'
 import React, { useState } from 'react'
 import type { Entry, Project, Comment } from '@/lib/types'
-
-const FONT = `-apple-system, 'SF Pro Display', 'SF Pro Text', sans-serif`
-const CARD: React.CSSProperties = { background: 'white', borderRadius: 16, boxShadow: '0 1px 0 rgba(0,0,0,0.04), 0 2px 16px rgba(0,0,0,0.05)' }
+import { FONT, CARD, fmtDate } from '@/lib/ui'
 
 const WL = {
   heavy: { color: '#FF3B30', label: 'Heavy' },
@@ -18,9 +16,6 @@ const TS = {
   carried: { color: '#FF9500', label: 'Carried →' },
 } as const
 
-function fmtDate(s: string) {
-  return new Date(s + 'T12:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-}
 
 interface EntryRowProps {
   entry: Entry

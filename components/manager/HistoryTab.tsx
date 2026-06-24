@@ -1,15 +1,10 @@
 'use client'
 import React, { useState, useEffect, useCallback } from 'react'
-import { Entry, Employee, Project } from '@/lib/types'
+import { Entry, Employee, Project, Comment } from '@/lib/types'
+import { FONT, CARD, fmtDate } from '@/lib/ui'
 import EntryRow from './EntryRow'
 
-const FONT = `-apple-system, 'SF Pro Display', 'SF Pro Text', sans-serif`
-const CARD: React.CSSProperties = { background: 'white', borderRadius: 16, boxShadow: '0 1px 0 rgba(0,0,0,0.04), 0 2px 16px rgba(0,0,0,0.05)' }
 const TODAY = new Date().toISOString().slice(0, 10)
-
-function fmtDate(s: string) {
-  return new Date(s + 'T12:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-}
 
 function fmtShort(s: string) {
   return new Date(s + 'T12:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
@@ -48,7 +43,17 @@ function StatCard({ value, label, color }: { value: string | number; label: stri
 // ── List View ─────────────────────────────────────────────────────────────────
 function ListView({ entries, projects, employees }: { entries: Entry[]; projects: Project[]; employees: Employee[] }) {
   const [empFilter, setEmpFilter] = useState('')
+  const [comments, setComments] = useState<Record<string, Comment[]>>({})
   const filtered = empFilter ? entries.filter(e => e.employee_id === empFilter) : entries
+
+  async function onExpand(entryId: string) {
+    if (comments[entryId] !== undefined) return
+    try {
+      const res = await fetch(`/api/comments?entry_id=${entryId}`)
+      const d = await res.json()
+      setComments(prev => ({ ...prev, [entryId]: d.comments || [] }))
+    } catch { setComments(prev => ({ ...prev, [entryId]: [] })) }
+  }
   const sorted = [...filtered].sort((a, b) => b.date.localeCompare(a.date) || b.timestamp.localeCompare(a.timestamp))
   const grouped: Record<string, Entry[]> = {}
   sorted.forEach(e => { if (!grouped[e.date]) grouped[e.date] = []; grouped[e.date].push(e) })
@@ -85,7 +90,7 @@ function ListView({ entries, projects, employees }: { entries: Entry[]; projects
             <span>{fmtDate(date)}</span>
             <span style={{ color: '#AEAEB2', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>{grouped[date].length} submission{grouped[date].length !== 1 ? 's' : ''}</span>
           </div>
-          {grouped[date].map(e => <EntryRow key={e.id} entry={e} showName={!empFilter} projects={projects} />)}
+          {grouped[date].map(e => <EntryRow key={e.id} entry={e} showName={!empFilter} projects={projects} comments={comments[e.id]} onExpand={onExpand} />)}
         </div>
       ))}
       {sorted.length === 0 && (
@@ -211,7 +216,7 @@ function WeeklyDashboard({ entries, projects, employees }: { entries: Entry[]; p
           <div style={{ fontSize: 13, fontWeight: 600, color: '#6E6E73', marginBottom: 12, fontFamily: FONT }}>
             {new Date(selDay + 'T12:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long' })}
           </div>
-          <EntryRow entry={selDayEntry} showName={false} projects={projects} />
+          <EntryRow entry={selDayEntry} showName={false} projects={projects} comments={undefined} onExpand={undefined} />
         </div>
       )}
     </div>
@@ -408,6 +413,16 @@ function CalendarView({ entries, projects, employees }: { entries: Entry[]; proj
   const [vY, setVY] = useState(now.getFullYear())
   const [vM, setVM] = useState(now.getMonth())
   const [sel, setSel] = useState(TODAY)
+  const [comments, setComments] = useState<Record<string, Comment[]>>({})
+
+  async function onExpand(entryId: string) {
+    if (comments[entryId] !== undefined) return
+    try {
+      const res = await fetch(`/api/comments?entry_id=${entryId}`)
+      const d = await res.json()
+      setComments(prev => ({ ...prev, [entryId]: d.comments || [] }))
+    } catch { setComments(prev => ({ ...prev, [entryId]: [] })) }
+  }
   const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
   const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
@@ -492,7 +507,7 @@ function CalendarView({ entries, projects, employees }: { entries: Entry[]; proj
         </div>
         {selEntries.length === 0
           ? <div style={{ ...CARD, padding: '48px 20px', textAlign: 'center', color: '#AEAEB2', fontFamily: FONT, fontSize: 14 }}>No submissions for this date.</div>
-          : selEntries.map(e => <EntryRow key={e.id} entry={e} showName projects={projects} />)
+          : selEntries.map(e => <EntryRow key={e.id} entry={e} showName projects={projects} comments={comments[e.id]} onExpand={onExpand} />)
         }
       </div>
     </div>

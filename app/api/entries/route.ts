@@ -57,6 +57,15 @@ export async function PATCH(req: NextRequest) {
   if (!id) return NextResponse.json({ error: 'Missing entry id' }, { status: 400 })
 
   const admin = supabaseAdmin()
+
+  // Server-side edit limit: fetch current entry first
+  if (submit_count !== undefined) {
+    const { data: existing } = await admin.from('entries').select('submit_count').eq('id', id).single()
+    if (existing && (existing.submit_count ?? 1) >= 2) {
+      return NextResponse.json({ error: 'Edit limit reached. You can only edit your submission once.' }, { status: 403 })
+    }
+  }
+
   const updates: Record<string, unknown> = { timestamp: new Date().toISOString() }
   if (project_tasks !== undefined) updates.project_tasks = project_tasks
   if (workload !== undefined) updates.workload = workload

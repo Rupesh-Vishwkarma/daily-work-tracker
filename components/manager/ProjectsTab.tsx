@@ -1,15 +1,10 @@
 'use client'
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { Project, Employee, Entry } from '@/lib/types'
+import { FONT, CARD, fmtDate } from '@/lib/ui'
 
-const FONT = `-apple-system, 'SF Pro Display', 'SF Pro Text', sans-serif`
-const CARD: React.CSSProperties = { background: 'white', borderRadius: 16, boxShadow: '0 1px 0 rgba(0,0,0,0.04), 0 2px 16px rgba(0,0,0,0.05)' }
 const TODAY = new Date().toISOString().slice(0, 10)
 const COLORS = ['#6366F1', '#0EA5E9', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6']
-
-function fmtDate(s: string) {
-  return new Date(s + 'T12:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-}
 
 function slugify(name: string) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30)
@@ -45,31 +40,40 @@ export default function ProjectsTab() {
 
   useEffect(() => { load() }, [load])
 
-  const emps = employees.filter(e => e.role === 'employee')
+  const emps = useMemo(() => employees.filter(e => e.role === 'employee'), [employees])
   const active = projects.filter(p => p.status === 'active')
   const archived = projects.filter(p => p.status === 'closed')
 
-  function todayCount(pid: string) {
-    return entries.filter(e => e.date === TODAY && (e.project_tasks || []).some(t => t.project_id === pid)).length
-  }
-  function totalCount(pid: string) {
-    return entries.filter(e => (e.project_tasks || []).some(t => t.project_id === pid)).length
-  }
-  function lastActivity(pid: string) {
-    const dates = entries.filter(e => (e.project_tasks || []).some(t => t.project_id === pid)).map(e => e.date).sort()
-    return dates.length ? fmtDate(dates[dates.length - 1]) : '—'
-  }
-  function totalHours(pid: string) {
-    return entries.reduce((s, e) => s + (e.project_tasks || []).filter(t => t.project_id === pid).reduce((ss, t) => ss + (parseFloat((t.time || '0').replace(/[^\d.]/g, '')) || 0), 0), 0)
-  }
-  function contribFor(pid: string) {
-    return emps.map(emp => {
-      const ee = entries.filter(e => e.employee_id === emp.id && (e.project_tasks || []).some(t => t.project_id === pid))
-      if (!ee.length) return null
-      const t = ee.reduce((s, e) => s + (e.project_tasks || []).filter(t => t.project_id === pid).reduce((ss, t) => ss + (parseFloat((t.time || '0').replace(/[^\d.]/g, '')) || 0), 0), 0)
-      return { name: emp.name, entries: ee.length, time: t }
-    }).filter(Boolean).sort((a, b) => b!.time - a!.time) as { name: string; entries: number; time: number }[]
-  }
+  const projectStats = useMemo(() => {
+    const parseH = (t: string) => parseFloat((t || '0').replace(/[^\d.]/g, '')) || 0
+    const map: Record<string, { todayCount: number; totalCount: number; lastActivity: string; totalHours: number; contrib: { name: string; entries: number; time: number }[] }> = {}
+    projects.forEach(p => {
+      const pid = p.id
+      const pe = entries.filter(e => (e.project_tasks || []).some(t => t.project_id === pid))
+      const dates = pe.map(e => e.date).sort()
+      const hours = pe.reduce((s, e) => s + (e.project_tasks || []).filter(t => t.project_id === pid).reduce((ss, t) => ss + parseH(t.time), 0), 0)
+      const contrib = emps.map(emp => {
+        const ee = pe.filter(e => e.employee_id === emp.id)
+        if (!ee.length) return null
+        const h = ee.reduce((s, e) => s + (e.project_tasks || []).filter(t => t.project_id === pid).reduce((ss, t) => ss + parseH(t.time), 0), 0)
+        return { name: emp.name, entries: ee.length, time: h }
+      }).filter(Boolean).sort((a, b) => b!.time - a!.time) as { name: string; entries: number; time: number }[]
+      map[pid] = {
+        todayCount: pe.filter(e => e.date === TODAY).length,
+        totalCount: pe.length,
+        lastActivity: dates.length ? fmtDate(dates[dates.length - 1]) : '—',
+        totalHours: hours,
+        contrib,
+      }
+    })
+    return map
+  }, [projects, entries, emps])
+
+  const todayCount = (pid: string) => projectStats[pid]?.todayCount ?? 0
+  const totalCount = (pid: string) => projectStats[pid]?.totalCount ?? 0
+  const lastActivity = (pid: string) => projectStats[pid]?.lastActivity ?? '—'
+  const totalHours = (pid: string) => projectStats[pid]?.totalHours ?? 0
+  const contribFor = (pid: string) => projectStats[pid]?.contrib ?? []
 
   const selProj = selected ? projects.find(p => p.id === selected) : null
   const selEntries = selected ? entries.filter(e => (e.project_tasks || []).some(t => t.project_id === selected)).sort((a, b) => b.date.localeCompare(a.date)) : []
@@ -88,10 +92,11 @@ export default function ProjectsTab() {
       const id = slugify(newProj.name) || `proj${Date.now()}`
       const lead = newProj.lead || emps[0]?.id
       const members = [...new Set([lead, ...newProj.members].filter(Boolean))]
-      await fetch('/api/projects', {
+      const res = await fetch('/api/projects', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, name: newProj.name.trim(), color: newProj.color, lead, members, start_date: newProj.startDate, deadline: newProj.deadline || null })
       })
+      if (!res.ok) { const d = await res.json(); alert(d.error || 'Failed to create project.'); return }
       setShowAdd(false)
       setNewProj({ name: '', lead: '', members: [], startDate: TODAY, deadline: '', color: '#6366F1' })
       load()

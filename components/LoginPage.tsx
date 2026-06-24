@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { Session } from '@/lib/types'
 
 const MANAGER_EMAIL = 'ai.merillife@gmail.com'
-const MANAGER_USERNAME = 'Shorya'
+const MANAGER_USERNAME = 'Manager'
 const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif'
 
 const IS: React.CSSProperties = {
