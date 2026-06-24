@@ -114,7 +114,7 @@ export default function SettingsTab() {
             <tbody>
               <tr style={{ borderBottom: '1px solid var(--border)' }}>
                 <td style={{ padding: '10px 12px', color: 'var(--text4)' }}>—</td>
-                <td style={{ padding: '10px 12px', fontWeight: 600 }}>Manager (Shorya)</td>
+                <td style={{ padding: '10px 12px', fontWeight: 600 }}>Manager</td>
                 <td style={{ padding: '10px 12px', color: 'var(--text3)' }}>Shorya</td>
                 <td style={{ padding: '10px 12px', color: 'var(--text4)', fontSize: 12 }}>Supabase Auth</td>
                 <td style={{ padding: '10px 12px', color: 'var(--text4)', fontSize: 12 }}>Built-in</td>

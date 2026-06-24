@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     // We pass email as username field from the frontend for manager
     if (error) return NextResponse.json({ error: 'Invalid manager credentials' }, { status: 401 })
     return NextResponse.json({
-      session: { id: 'manager', username: MANAGER_USERNAME, name: 'Shorya S', role: 'manager' },
+      session: { id: 'manager', username: MANAGER_USERNAME, name: 'Manager', role: 'manager' },
       access_token: data.session?.access_token
     })
   }

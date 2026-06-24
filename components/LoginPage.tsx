@@ -93,7 +93,7 @@ export default function LoginPage({ onLogin }: { onLogin: (s: Session) => void }
         </div>
 
         <p style={{ textAlign: 'center', marginTop: 20, fontSize: 13, color: '#AEAEB2' }}>
-          Manager: use username <strong style={{ color: '#6E6E73' }}>Shorya</strong>
+          Manager: use username <strong style={{ color: '#6E6E73' }}>Shorya</strong> (case-insensitive)
         </p>
       </div>
     </div>
