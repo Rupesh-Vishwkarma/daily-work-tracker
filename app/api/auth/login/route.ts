@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { supabase } from '@/lib/supabase'
 
-const MANAGER_USERNAME = 'Shorya'
+const MANAGER_USERNAME = 'Manager'
 
 export async function POST(req: NextRequest) {
   const { username, password } = await req.json()
