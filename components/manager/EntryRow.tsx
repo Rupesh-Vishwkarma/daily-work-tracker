@@ -157,6 +157,25 @@ export default function EntryRow({
             </div>
           )}
 
+        </div>
+      )}
+
+      {isManager && !entry.is_absent && (
+        <div style={{ borderTop: '1px solid rgba(0,0,0,0.06)', padding: '10px 20px 14px' }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {onToggleReviewed && (
+              <button onClick={() => onToggleReviewed(entry.id)}
+                style={{ padding: '6px 14px', borderRadius: 980, fontSize: 12, fontWeight: 590, cursor: 'pointer', fontFamily: FONT, background: reviewed ? '#F5F5F7' : '#0071E3', color: reviewed ? '#6E6E73' : 'white', border: reviewed ? '1px solid rgba(0,0,0,0.1)' : 'none' }}>
+                {reviewed ? '↩ Unmark Reviewed' : '✓ Mark Reviewed'}
+              </button>
+            )}
+            {onAddComment && !showCmt && (
+              <button onClick={() => setShowCmt(true)}
+                style={{ padding: '6px 14px', borderRadius: 980, fontSize: 12, cursor: 'pointer', fontFamily: FONT, background: 'none', border: '1.5px solid rgba(0,113,227,0.3)', color: '#0071E3' }}>
+                Add Note
+              </button>
+            )}
+          </div>
           {showCmt && (
             <div style={{ marginTop: 8 }}>
               <textarea
@@ -174,23 +193,6 @@ export default function EntryRow({
                   Cancel
                 </button>
               </div>
-            </div>
-          )}
-
-          {isManager && (
-            <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-              {onToggleReviewed && (
-                <button onClick={() => onToggleReviewed(entry.id)}
-                  style={{ padding: '6px 14px', borderRadius: 980, fontSize: 12, fontWeight: 590, cursor: 'pointer', fontFamily: FONT, background: reviewed ? '#F5F5F7' : '#0071E3', color: reviewed ? '#6E6E73' : 'white', border: reviewed ? '1px solid rgba(0,0,0,0.1)' : 'none' }}>
-                  {reviewed ? '↩ Unmark Reviewed' : '✓ Mark Reviewed'}
-                </button>
-              )}
-              {onAddComment && !showCmt && (
-                <button onClick={() => setShowCmt(true)}
-                  style={{ padding: '6px 14px', borderRadius: 980, fontSize: 12, cursor: 'pointer', fontFamily: FONT, background: 'none', border: '1.5px solid rgba(0,113,227,0.3)', color: '#0071E3' }}>
-                  Add Note
-                </button>
-              )}
             </div>
           )}
         </div>
