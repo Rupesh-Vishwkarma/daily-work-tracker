@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { supabase } from '@/lib/supabase'
 
 const MANAGER_USERNAME = 'Manager'
+const MANAGER_EMAIL = 'ai.merillife@gmail.com'
 
 export async function POST(req: NextRequest) {
   const { username, password } = await req.json()
@@ -12,7 +13,7 @@ export async function POST(req: NextRequest) {
 
   // Manager: authenticate via Supabase Auth
   if (username.trim().toLowerCase() === MANAGER_USERNAME.toLowerCase()) {
-    const { data, error } = await supabase.auth.signInWithPassword({ email: password.includes('@') ? password : username, password })
+    const { data, error } = await supabase.auth.signInWithPassword({ email: MANAGER_EMAIL, password })
     // Manager login uses email+password stored in Supabase Auth
     // We pass email as username field from the frontend for manager
     if (error) return NextResponse.json({ error: 'Invalid manager credentials' }, { status: 401 })
