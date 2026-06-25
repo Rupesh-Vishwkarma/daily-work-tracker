@@ -518,7 +518,7 @@ function CalendarView({ entries, projects, employees }: { entries: Entry[]; proj
 type View = 'list' | 'weekly' | 'people' | 'calendar'
 
 export default function HistoryTab() {
-  const [view, setView] = useState<View>('list')
+  const [view, setView] = useState<View>('calendar')
   const [from, setFrom] = useState(() => new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10))
   const [to, setTo] = useState(TODAY)
   const [entries, setEntries] = useState<Entry[]>([])
@@ -548,10 +548,10 @@ export default function HistoryTab() {
   }
 
   const VIEWS: { id: View; label: string }[] = [
-    { id: 'list', label: 'List' },
+    { id: 'calendar', label: 'Calendar' },
     { id: 'weekly', label: 'Weekly' },
     { id: 'people', label: 'People' },
-    { id: 'calendar', label: 'Calendar' },
+    { id: 'list', label: 'List' },
   ]
 
   return (
