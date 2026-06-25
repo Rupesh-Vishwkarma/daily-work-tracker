@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
-import { Session, Entry, Project, ProjectTask, TaskStatus, Workload } from '@/lib/types'
+import { Session, Entry, Project, ProjectTask, TaskStatus, Workload, Comment } from '@/lib/types'
 
 const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif'
 const TODAY = () => new Date().toISOString().slice(0, 10)
@@ -67,6 +67,24 @@ function TaskDisplay({ tasks, projects }: { tasks: ProjectTask[]; projects: Proj
           </div>
         )
       })}
+    </div>
+  )
+}
+
+// ── Manager notes (visible to employee) ──────────────────────────────────────
+function ManagerNotes({ comments }: { comments: Comment[] }) {
+  if (!comments.length) return null
+  return (
+    <div style={{ marginTop: 12 }}>
+      {comments.map(c => (
+        <div key={c.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 14px', background: 'rgba(0,113,227,0.06)', borderRadius: 10, borderLeft: '3px solid #0071E3', marginTop: 8 }}>
+          <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#0071E3', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 11, fontWeight: 700, color: 'white', fontFamily: FONT }}>M</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#0071E3', fontFamily: FONT, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Manager note</div>
+            <div style={{ fontSize: 13, color: '#1D1D1F', fontFamily: FONT, lineHeight: 1.5 }}>{c.text}</div>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -186,6 +204,7 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
   const [error, setError] = useState('')
   const [broadcast, setBroadcast] = useState<{ message: string; active: boolean } | null>(null)
   const [broadcastDismissed, setBroadcastDismissed] = useState(false)
+  const [commentsMap, setCommentsMap] = useState<Record<string, Comment[]>>({})
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -199,10 +218,22 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
         fetch(`/api/entries?employee_id=${session.id}&from=${from}&to=${today}`),
       ])
       const [eData, pData, bData, hData] = await Promise.all([eRes.json(), pRes.json(), bRes.json(), hRes.json()])
-      setTodayEntry(eData.entries?.[0] || null)
+      const todayEnt: Entry | null = eData.entries?.[0] || null
+      const historyEnts: Entry[] = hData.entries || []
+      setTodayEntry(todayEnt)
       setProjects(pData.projects || [])
       if (bData.active) setBroadcast(bData)
-      setEntries(hData.entries || [])
+      setEntries(historyEnts)
+
+      const allEntries = [...(todayEnt ? [todayEnt] : []), ...historyEnts]
+      if (allEntries.length > 0) {
+        const commentResults = await Promise.all(
+          allEntries.map(e => fetch(`/api/comments?entry_id=${e.id}`).then(r => r.json()))
+        )
+        const map: Record<string, Comment[]> = {}
+        allEntries.forEach((e, i) => { map[e.id] = commentResults[i].comments || [] })
+        setCommentsMap(map)
+      }
     } catch {
       setError('Failed to load data. Please refresh.')
     } finally {
@@ -327,6 +358,7 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
                   )}
                 </div>
                 <TaskDisplay tasks={todayEntry.project_tasks} projects={projects} />
+                <ManagerNotes comments={commentsMap[todayEntry.id] || []} />
               </div>
             )}
 
@@ -484,6 +516,7 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
                       ? <div style={{ color: '#AEAEB2', fontSize: 13, fontStyle: 'italic' }}>Marked absent for this day.</div>
                       : <TaskDisplay tasks={entry.project_tasks} projects={projects} />
                     }
+                    <ManagerNotes comments={commentsMap[entry.id] || []} />
                   </div>
                 ))}
               </div>
