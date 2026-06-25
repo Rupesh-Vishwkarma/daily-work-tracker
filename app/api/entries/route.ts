@@ -5,8 +5,13 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const from = searchParams.get('from')
   const to = searchParams.get('to')
-  const employeeId = searchParams.get('employee_id')
   const today = searchParams.get('today')
+
+  const role = req.headers.get('x-user-role')
+  const userId = req.headers.get('x-user-id')
+  // Employees may only read their own entries, regardless of the query param.
+  let employeeId = searchParams.get('employee_id')
+  if (role !== 'manager') employeeId = userId
 
   const admin = supabaseAdmin()
   let query = admin.from('entries').select('*').order('date', { ascending: false }).order('timestamp', { ascending: false })
@@ -26,14 +31,27 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { employee_id, employee_name, date, workload, project_tasks, is_absent, submitted_by_manager, submit_count } = body
+  const { date, workload, project_tasks, is_absent, submitted_by_manager, submit_count } = body
+  let { employee_id, employee_name } = body
+
+  const role = req.headers.get('x-user-role')
+  const userId = req.headers.get('x-user-id')
+  const userName = req.headers.get('x-user-name')
+  // Employees can only submit entries for themselves.
+  if (role !== 'manager') {
+    employee_id = userId
+    employee_name = userName || userId
+  }
 
   if (!employee_id || !date || !workload) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
+  if (project_tasks !== undefined && (!Array.isArray(project_tasks) || project_tasks.length > 50)) {
+    return NextResponse.json({ error: 'Invalid project_tasks' }, { status: 400 })
+  }
 
   const admin = supabaseAdmin()
-  const id = `e${Date.now()}${Math.floor(Math.random() * 9999)}`
+  const id = crypto.randomUUID()
   const { data, error } = await admin.from('entries').insert([{
     id,
     employee_id,
@@ -55,15 +73,23 @@ export async function PATCH(req: NextRequest) {
   const body = await req.json()
   const { id, project_tasks, workload, submit_count } = body
   if (!id) return NextResponse.json({ error: 'Missing entry id' }, { status: 400 })
+  if (project_tasks !== undefined && (!Array.isArray(project_tasks) || project_tasks.length > 50)) {
+    return NextResponse.json({ error: 'Invalid project_tasks' }, { status: 400 })
+  }
+
+  const role = req.headers.get('x-user-role')
+  const userId = req.headers.get('x-user-id')
 
   const admin = supabaseAdmin()
 
-  // Server-side edit limit: fetch current entry first
-  if (submit_count !== undefined) {
-    const { data: existing } = await admin.from('entries').select('submit_count').eq('id', id).single()
-    if (existing && (existing.submit_count ?? 1) >= 2) {
-      return NextResponse.json({ error: 'Edit limit reached. You can only edit your submission once.' }, { status: 403 })
-    }
+  // Single read for both ownership and the edit-limit check.
+  const { data: existing } = await admin.from('entries').select('employee_id, submit_count').eq('id', id).single()
+  if (!existing) return NextResponse.json({ error: 'Entry not found' }, { status: 404 })
+  if (role !== 'manager' && existing.employee_id !== userId) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+  if (submit_count !== undefined && (existing.submit_count ?? 1) >= 2) {
+    return NextResponse.json({ error: 'Edit limit reached. You can only edit your submission once.' }, { status: 403 })
   }
 
   const updates: Record<string, unknown> = { timestamp: new Date().toISOString() }

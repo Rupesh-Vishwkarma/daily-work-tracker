@@ -46,7 +46,7 @@ export default function BlockersTab() {
       setEntries(all.filter(e => e.project_tasks?.some(t => t.status === 'blocked' || (t.blockers && t.blockers.trim()))))
       setProjects(projs.projects || [])
       setResolvedKeys(new Set(res.resolved_keys || []))
-    } catch { } finally { setLoading(false) }
+    } catch (e) { console.error('Failed to load blockers', e) } finally { setLoading(false) }
   }, [])
 
   useEffect(() => { load() }, [load])

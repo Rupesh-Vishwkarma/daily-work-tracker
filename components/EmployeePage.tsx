@@ -1,10 +1,9 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { Session, Entry, Project, ProjectTask, TaskStatus, Workload, Comment } from '@/lib/types'
+import { FONT, CARD, fmtDate as FMT_DATE } from '@/lib/ui'
 
-const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif'
 const TODAY = () => new Date().toISOString().slice(0, 10)
-const FMT_DATE = (s: string) => new Date(s + 'T12:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 
 const TASK_STATUS: Record<TaskStatus, { label: string; color: string; bg: string }> = {
   completed:   { label: 'Done',        color: '#34C759', bg: 'rgba(52,199,89,0.1)' },
@@ -106,7 +105,6 @@ function MyStats({ entries, projects }: { entries: Entry[]; projects: Project[] 
   allTasks.forEach(t => { if (t.project_id) projH[t.project_id] = (projH[t.project_id] || 0) + (parseFloat(t.time) || 0) })
   const projBreak = Object.entries(projH).sort((a, b) => b[1] - a[1]).slice(0, 6)
   const maxH = Math.max(...projBreak.map(([, h]) => h), 1)
-  const CARD: React.CSSProperties = { background: 'white', borderRadius: 16, boxShadow: '0 1px 0 rgba(0,0,0,0.04),0 2px 16px rgba(0,0,0,0.05)' }
 
   return (
     <div>
@@ -293,7 +291,6 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
   const hasSubmitted = !!todayEntry && !editMode
   const myProj = projects.filter(p => p.status === 'active' && (p.members?.includes(session.id) || p.lead === session.id))
   const otherProj = projects.filter(p => p.status === 'active' && !p.members?.includes(session.id) && p.lead !== session.id)
-  const CARD: React.CSSProperties = { background: 'white', borderRadius: 16, boxShadow: '0 1px 0 rgba(0,0,0,0.04),0 2px 16px rgba(0,0,0,0.05)' }
 
   return (
     <div style={{ minHeight: '100vh', fontFamily: FONT }}>

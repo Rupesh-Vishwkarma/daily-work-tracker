@@ -1,10 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { Session } from '@/lib/types'
-
-const MANAGER_EMAIL = 'ai.merillife@gmail.com'
-const MANAGER_USERNAME = 'Manager'
-const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif'
+import { FONT } from '@/lib/ui'
 
 const IS: React.CSSProperties = {
   width: '100%', padding: '13px 16px', border: 'none', borderRadius: 0,
@@ -24,10 +21,7 @@ export default function LoginPage({ onLogin }: { onLogin: (s: Session) => void }
     if (!username || !password) { setError('Enter your username and password.'); return }
     setLoading(true); setError('')
     try {
-      const isManager = username.trim().toLowerCase() === MANAGER_USERNAME.toLowerCase()
-      const endpoint = isManager ? '/api/auth/manager-login' : '/api/auth/login'
-      const body = isManager ? { email: MANAGER_EMAIL, password } : { username, password }
-      const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const res = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) })
       const data = await res.json()
       if (!res.ok) { setError(data.error || 'Login failed.'); return }
       onLogin(data.session)

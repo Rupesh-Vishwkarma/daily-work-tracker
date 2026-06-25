@@ -21,6 +21,7 @@ export default function Home() {
   }
 
   function handleLogout() {
+    fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
     sessionStorage.removeItem('dwt_session')
     setSession(null)
   }

@@ -8,7 +8,7 @@ export default function SettingsTab() {
   const [showEditFor, setShowEditFor] = useState<string | null>(null)
   const [newName, setNewName] = useState('')
   const [newUser, setNewUser] = useState('')
-  const [newPw, setNewPw] = useState('Work@123')
+  const [newPw, setNewPw] = useState('')
   const [addMsg, setAddMsg] = useState<{ type: string; text: string } | null>(null)
   const [broadcast, setBroadcast] = useState({ message: '', active: false })
   const [broadcastSaving, setBroadcastSaving] = useState(false)
@@ -52,7 +52,7 @@ export default function SettingsTab() {
     const data = await res.json()
     if (!res.ok) { setAddMsg({ type: 'error', text: data.error || 'Failed to add employee.' }); return }
     setAddMsg({ type: 'success', text: `"${newName}" added successfully.` })
-    setNewName(''); setNewUser(''); setNewPw('Work@123')
+    setNewName(''); setNewUser(''); setNewPw('')
     load()
   }
 
@@ -118,7 +118,7 @@ export default function SettingsTab() {
               <tr style={{ borderBottom: '1px solid var(--border)' }}>
                 <td style={{ padding: '10px 12px', color: 'var(--text4)' }}>—</td>
                 <td style={{ padding: '10px 12px', fontWeight: 600 }}>Manager</td>
-                <td style={{ padding: '10px 12px', color: 'var(--text3)' }}>Shorya</td>
+                <td style={{ padding: '10px 12px', color: 'var(--text3)' }}>Manager</td>
                 <td style={{ padding: '10px 12px', color: 'var(--text4)', fontSize: 12 }}>Supabase Auth</td>
                 <td style={{ padding: '10px 12px', color: 'var(--text4)', fontSize: 12 }}>Built-in</td>
               </tr>
@@ -170,7 +170,7 @@ export default function SettingsTab() {
           </div>
           <div style={{ flex: 1, minWidth: 120 }}>
             <label>Password</label>
-            <input type="text" value={newPw} onChange={e => setNewPw(e.target.value)} />
+            <input type="text" value={newPw} onChange={e => setNewPw(e.target.value)} placeholder="Set a password" />
           </div>
           <button className="btn btn-primary" onClick={addEmployee}>Add Employee</button>
         </div>

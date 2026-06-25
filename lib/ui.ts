@@ -1,6 +1,6 @@
 import type React from 'react'
 
-export const FONT = `-apple-system, 'SF Pro Display', 'SF Pro Text', sans-serif`
+export const FONT = `-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', sans-serif`
 
 export const CARD: React.CSSProperties = {
   background: 'white',
