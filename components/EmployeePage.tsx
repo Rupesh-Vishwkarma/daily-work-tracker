@@ -366,11 +366,15 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
             {(!hasSubmitted || editMode) && (
               <div style={{ ...CARD, padding: 24 }}>
                 <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', letterSpacing: '-0.02em' }}>
-                  <span>{editMode ? "Update Today's Work" : "Today's Work"}</span>
+                  <div>
+                    <span>{editMode ? "Update Today's Work" : "Today's Work"}</span>
+                    <div style={{ fontSize: 13, fontWeight: 400, color: '#AEAEB2', marginTop: 2 }}>{FMT_DATE(today)}</div>
+                  </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: 13, fontWeight: 400, color: '#AEAEB2' }}>{myProj.length} project{myProj.length !== 1 ? 's' : ''}</span>
                     {editMode && <button className="btn btn-secondary btn-sm" onClick={() => setEditMode(false)}>Cancel</button>}
                   </div>
+
                 </div>
 
                 {editMode && (
