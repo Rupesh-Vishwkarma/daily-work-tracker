@@ -25,6 +25,9 @@ export default function ProjectsTab() {
   const [extendDate, setExtendDate] = useState('')
   const [editingName, setEditingName] = useState<string | null>(null)
   const [editNameVal, setEditNameVal] = useState('')
+  const [editingMembers, setEditingMembers] = useState<string | null>(null)
+  const [editMembers, setEditMembers] = useState<string[]>([])
+  const [editLead, setEditLead] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -133,9 +136,20 @@ export default function ProjectsTab() {
   async function extendDeadline(pid: string) {
     if (!extendDate) return
     const proj = projects.find(p => p.id === pid)
-    const prev = [...(proj?.previous_deadlines || []), proj?.deadline].filter(Boolean)
+    const prev = proj?.deadline
+      ? [...(proj.previous_deadlines || []), proj.deadline].filter(Boolean)
+      : (proj?.previous_deadlines || [])
     await fetch('/api/projects', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: pid, deadline: extendDate, previous_deadlines: prev }) })
     setExtendPid(null); setExtendDate('')
+    load()
+  }
+
+  async function saveTeam(pid: string) {
+    const lead = editLead || editMembers[0] || ''
+    const members = [...new Set([lead, ...editMembers].filter(Boolean))]
+    const res = await fetch('/api/projects', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: pid, members, lead }) })
+    if (!res.ok) { const d = await res.json(); alert(d.error || 'Failed to update team.'); return }
+    setEditingMembers(null)
     load()
   }
 
@@ -329,21 +343,21 @@ export default function ProjectsTab() {
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               {extendPid === selProj.id
                 ? <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                  <input type="date" value={extendDate} onChange={e => setExtendDate(e.target.value)}
-                    style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(0,113,227,0.3)', background: 'white', fontSize: 13, fontFamily: FONT, outline: 'none' }} />
-                  <button onClick={() => extendDeadline(selProj.id)}
-                    style={{ padding: '6px 12px', background: '#0071E3', color: 'white', border: 'none', borderRadius: 980, fontSize: 12, cursor: 'pointer', fontFamily: FONT, fontWeight: 590 }}>
-                    Extend
+                    <input type="date" value={extendDate} onChange={e => setExtendDate(e.target.value)}
+                      style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(0,113,227,0.3)', background: 'white', fontSize: 13, fontFamily: FONT, outline: 'none' }} />
+                    <button onClick={() => extendDeadline(selProj.id)}
+                      style={{ padding: '6px 12px', background: '#0071E3', color: 'white', border: 'none', borderRadius: 980, fontSize: 12, cursor: 'pointer', fontFamily: FONT, fontWeight: 590 }}>
+                      Save
+                    </button>
+                    <button onClick={() => setExtendPid(null)}
+                      style={{ padding: '6px 12px', background: 'none', border: '1.5px solid rgba(0,0,0,0.15)', color: '#6E6E73', borderRadius: 980, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
+                      Cancel
+                    </button>
+                  </div>
+                : <button onClick={() => { setExtendPid(selProj.id); setExtendDate(selProj.deadline || '') }}
+                    style={{ padding: '6px 12px', background: 'none', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 980, fontSize: 12, cursor: 'pointer', color: '#6E6E73', fontFamily: FONT }}>
+                    {selProj.deadline ? 'Edit Deadline' : 'Set Deadline'}
                   </button>
-                  <button onClick={() => setExtendPid(null)}
-                    style={{ padding: '6px 12px', background: 'none', border: '1.5px solid rgba(0,0,0,0.15)', color: '#6E6E73', borderRadius: 980, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
-                    Cancel
-                  </button>
-                </div>
-                : selProj.deadline && <button onClick={() => { setExtendPid(selProj.id); setExtendDate(selProj.deadline || '') }}
-                  style={{ padding: '6px 12px', background: 'none', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 980, fontSize: 12, cursor: 'pointer', color: '#6E6E73', fontFamily: FONT }}>
-                  Extend Deadline
-                </button>
               }
             </div>
           </div>
@@ -362,23 +376,97 @@ export default function ProjectsTab() {
           )}
 
           {/* Members */}
-          {(selProj.members || []).length > 0 && (
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#AEAEB2', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8, fontFamily: FONT }}>Team</div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {selProj.members.map(mid => {
-                  const emp = allPeople.find(e => e.id === mid)
-                  if (!emp) return null
-                  const isLead = selProj.lead === mid
-                  return (
-                    <span key={mid} style={{ padding: '4px 12px', borderRadius: 980, fontSize: 12, fontWeight: isLead ? 600 : 400, background: isLead ? selProj.color + '20' : '#F2F2F7', color: isLead ? selProj.color : '#6E6E73', fontFamily: FONT }}>
-                      {emp.name}{isLead ? ' (Lead)' : ''}
-                    </span>
-                  )
-                })}
-              </div>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#AEAEB2', textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: FONT }}>Team</div>
+              {editingMembers !== selProj.id
+                ? <button onClick={() => { setEditingMembers(selProj.id); setEditMembers([...(selProj.members || [])]); setEditLead(selProj.lead || '') }}
+                    style={{ fontSize: 12, color: '#0071E3', background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT, padding: 0 }}>
+                    Edit Team
+                  </button>
+                : <div style={{ display: 'flex', gap: 6 }}>
+                    <button onClick={() => saveTeam(selProj.id)}
+                      style={{ padding: '4px 12px', background: '#0071E3', color: 'white', border: 'none', borderRadius: 980, fontSize: 12, cursor: 'pointer', fontFamily: FONT, fontWeight: 590 }}>
+                      Save
+                    </button>
+                    <button onClick={() => setEditingMembers(null)}
+                      style={{ padding: '4px 10px', background: 'none', border: '1px solid rgba(0,0,0,0.12)', borderRadius: 980, fontSize: 12, cursor: 'pointer', color: '#6E6E73', fontFamily: FONT }}>
+                      Cancel
+                    </button>
+                  </div>
+              }
             </div>
-          )}
+
+            {editingMembers === selProj.id
+              ? (() => {
+                  const contributedIds = new Set(
+                    entries.filter(e => (e.project_tasks || []).some(t => t.project_id === selProj.id)).map(e => e.employee_id)
+                  )
+                  return (
+                    <div>
+                      {/* Lead selector */}
+                      <div style={{ marginBottom: 10 }}>
+                        <div style={{ fontSize: 11, color: '#AEAEB2', marginBottom: 6, fontFamily: FONT }}>Lead</div>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {editMembers.map(mid => {
+                            const person = allPeople.find(e => e.id === mid)
+                            if (!person) return null
+                            const isLead = editLead === mid
+                            return (
+                              <button key={mid} onClick={() => setEditLead(mid)}
+                                style={{ padding: '4px 12px', borderRadius: 980, fontSize: 12, cursor: 'pointer', fontFamily: FONT, border: 'none', background: isLead ? selProj.color : '#F2F2F7', color: isLead ? 'white' : '#6E6E73', fontWeight: isLead ? 600 : 400 }}>
+                                {person.name}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                      {/* Member toggles */}
+                      <div style={{ fontSize: 11, color: '#AEAEB2', marginBottom: 6, fontFamily: FONT }}>Members</div>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {allPeople.map(person => {
+                          const isMem = editMembers.includes(person.id)
+                          const hasContrib = contributedIds.has(person.id)
+                          const isLead = editLead === person.id
+                          return (
+                            <button key={person.id}
+                              onClick={() => {
+                                if (hasContrib || isLead) return
+                                setEditMembers(prev =>
+                                  prev.includes(person.id) ? prev.filter(id => id !== person.id) : [...prev, person.id]
+                                )
+                              }}
+                              title={hasContrib ? 'Has contributed — cannot be removed' : isLead ? 'Project lead — change lead first' : undefined}
+                              style={{ padding: '4px 12px', borderRadius: 980, fontSize: 12, fontFamily: FONT, border: `1.5px solid ${isMem ? (hasContrib ? '#AEAEB2' : 'rgba(0,113,227,0.4)') : 'transparent'}`, background: isMem ? (hasContrib ? '#F2F2F7' : 'rgba(0,113,227,0.08)') : '#F5F5F7', color: isMem ? (hasContrib ? '#6E6E73' : '#0071E3') : '#AEAEB2', cursor: hasContrib || isLead ? 'default' : 'pointer', fontWeight: isMem ? 500 : 400, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                              {person.name}
+                              {hasContrib && <span style={{ fontSize: 10, opacity: 0.6 }}>🔒</span>}
+                            </button>
+                          )
+                        })}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#AEAEB2', marginTop: 8, fontFamily: FONT }}>🔒 Members who have logged work on this project cannot be removed.</div>
+                    </div>
+                  )
+                })()
+              : (
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {(selProj.members || []).map(mid => {
+                    const emp = allPeople.find(e => e.id === mid)
+                    if (!emp) return null
+                    const isLead = selProj.lead === mid
+                    return (
+                      <span key={mid} style={{ padding: '4px 12px', borderRadius: 980, fontSize: 12, fontWeight: isLead ? 600 : 400, background: isLead ? selProj.color + '20' : '#F2F2F7', color: isLead ? selProj.color : '#6E6E73', fontFamily: FONT }}>
+                        {emp.name}{isLead ? ' (Lead)' : ''}
+                      </span>
+                    )
+                  })}
+                  {(selProj.members || []).length === 0 && (
+                    <span style={{ fontSize: 13, color: '#AEAEB2', fontFamily: FONT }}>No members yet — click Edit Team to add</span>
+                  )}
+                </div>
+              )
+            }
+          </div>
 
           {/* Contribution bars */}
           {contribFor(selProj.id).length > 0 && (
