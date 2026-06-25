@@ -43,6 +43,7 @@ export default function ProjectsTab() {
   useEffect(() => { load() }, [load])
 
   const emps = useMemo(() => employees.filter(e => e.role === 'employee'), [employees])
+  const allPeople = useMemo(() => [{ id: 'manager', name: 'Manager' }, ...emps], [emps])
   const active = projects.filter(p => p.status === 'active')
   const archived = projects.filter(p => p.status === 'closed')
 
@@ -178,7 +179,7 @@ export default function ProjectsTab() {
               <select value={newProj.lead} onChange={e => setNewProj(p => ({ ...p, lead: e.target.value }))}
                 style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: 'none', background: '#F5F5F7', fontSize: 14, fontFamily: FONT, outline: 'none' }}>
                 <option value="">— Select —</option>
-                {emps.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                {allPeople.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
               </select>
             </div>
             <div>
@@ -204,7 +205,7 @@ export default function ProjectsTab() {
           <div style={{ marginBottom: 16 }}>
             <label style={{ fontSize: 11, fontWeight: 700, color: '#AEAEB2', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8, display: 'block', fontFamily: FONT }}>Team Members</label>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {emps.map(emp => {
+              {allPeople.map(emp => {
                 const isLead = newProj.lead === emp.id
                 const isMem = isLead || newProj.members.includes(emp.id)
                 return (
@@ -238,7 +239,7 @@ export default function ProjectsTab() {
           const tc = todayCount(p.id)
           const tot = totalCount(p.id)
           const last = lastActivity(p.id)
-          const lead = emps.find(e => e.id === p.lead)
+          const lead = allPeople.find(e => e.id === p.lead)
           const isAct = selected === p.id
           const isOverdue = p.deadline && p.deadline < TODAY
           const daysLeft = p.deadline ? Math.ceil((new Date(p.deadline + 'T12:00:00').getTime() - new Date(TODAY + 'T12:00:00').getTime()) / 86400000) : null
@@ -366,7 +367,7 @@ export default function ProjectsTab() {
               <div style={{ fontSize: 11, fontWeight: 700, color: '#AEAEB2', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8, fontFamily: FONT }}>Team</div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {selProj.members.map(mid => {
-                  const emp = emps.find(e => e.id === mid)
+                  const emp = allPeople.find(e => e.id === mid)
                   if (!emp) return null
                   const isLead = selProj.lead === mid
                   return (
@@ -412,7 +413,7 @@ export default function ProjectsTab() {
           {showCompleted && archived.map(p => {
             const isOpen = expandedArchive === p.id
             const allE = entries.filter(e => (e.project_tasks || []).some(t => t.project_id === p.id))
-            const lead = emps.find(e => e.id === p.lead)
+            const lead = allPeople.find(e => e.id === p.lead)
             const totT = totalHours(p.id)
             const contrib = contribFor(p.id)
             const maxT = Math.max(...contrib.map(c => c.time), 1)
