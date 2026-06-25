@@ -110,6 +110,14 @@ export default function ProjectsTab() {
     load()
   }
 
+  async function deleteProject(pid: string, name: string) {
+    if (!confirm(`Permanently delete "${name}"? This cannot be undone.`)) return
+    const res = await fetch(`/api/projects?id=${encodeURIComponent(pid)}`, { method: 'DELETE' })
+    if (!res.ok) { const d = await res.json(); alert(d.error || 'Failed to delete project.'); return }
+    if (selected === pid) setSelected(null)
+    load()
+  }
+
   async function extendDeadline(pid: string) {
     if (!extendDate) return
     const proj = projects.find(p => p.id === pid)
@@ -228,10 +236,17 @@ export default function ProjectsTab() {
               style={{ ...CARD, padding: '18px 20px', cursor: 'pointer', borderTop: `3px solid ${p.color}`, boxShadow: isAct ? `0 0 0 2.5px ${p.color}, 0 4px 20px rgba(0,0,0,0.1)` : '0 1px 0 rgba(0,0,0,0.04), 0 2px 16px rgba(0,0,0,0.05)', transition: 'box-shadow .15s' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 4 }}>
                 <span style={{ fontWeight: 700, fontSize: 14, fontFamily: FONT, color: '#1D1D1F' }}>{p.name}</span>
-                <button onClick={e => { e.stopPropagation(); archiveProject(p.id) }}
-                  style={{ padding: '2px 8px', background: 'rgba(0,0,0,0.05)', border: 'none', borderRadius: 980, fontSize: 11, cursor: 'pointer', color: '#6E6E73', fontFamily: FONT, whiteSpace: 'nowrap' }}>
-                  Complete
-                </button>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button onClick={e => { e.stopPropagation(); archiveProject(p.id) }}
+                    style={{ padding: '2px 8px', background: 'rgba(0,0,0,0.05)', border: 'none', borderRadius: 980, fontSize: 11, cursor: 'pointer', color: '#6E6E73', fontFamily: FONT, whiteSpace: 'nowrap' }}>
+                    Complete
+                  </button>
+                  <button onClick={e => { e.stopPropagation(); deleteProject(p.id, p.name) }}
+                    style={{ padding: '2px 7px', background: 'rgba(255,59,48,0.08)', border: 'none', borderRadius: 980, fontSize: 13, cursor: 'pointer', color: '#FF3B30', fontFamily: FONT, lineHeight: 1 }}
+                    title="Delete project">
+                    🗑
+                  </button>
+                </div>
               </div>
               <div style={{ fontSize: 12, color: '#6E6E73', marginBottom: 8, fontFamily: FONT }}>
                 Lead: <strong style={{ color: '#1D1D1F' }}>{lead?.name || p.lead || '—'}</strong>
@@ -378,7 +393,14 @@ export default function ProjectsTab() {
                       Lead: <strong style={{ color: '#1D1D1F' }}>{lead?.name || p.lead}</strong> · {allE.length} entries{totT > 0 ? ` · ${totT}h` : ''}
                     </div>
                   </div>
-                  <span style={{ color: '#AEAEB2', fontSize: 11 }}>{isOpen ? '▲' : '▼'}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <button onClick={e => { e.stopPropagation(); deleteProject(p.id, p.name) }}
+                      style={{ padding: '3px 8px', background: 'rgba(255,59,48,0.08)', border: 'none', borderRadius: 980, fontSize: 13, cursor: 'pointer', color: '#FF3B30', fontFamily: FONT, lineHeight: 1 }}
+                      title="Delete project">
+                      🗑
+                    </button>
+                    <span style={{ color: '#AEAEB2', fontSize: 11 }}>{isOpen ? '▲' : '▼'}</span>
+                  </div>
                 </div>
                 {isOpen && (
                   <div style={{ padding: '0 20px 20px', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
