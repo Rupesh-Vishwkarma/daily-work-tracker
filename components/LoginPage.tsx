@@ -35,12 +35,15 @@ export default function LoginPage({ onLogin }: { onLogin: (s: Session) => void }
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#F5F5F7', fontFamily: FONT }}>
       <div style={{ width: '100%', maxWidth: 340, padding: '0 20px' }}>
-        <h1 style={{ textAlign: 'center', fontSize: 28, fontWeight: 700, letterSpacing: '-0.5px', marginBottom: 6, color: '#1D1D1F' }}>
-          Daily Work Tracker
-        </h1>
-        <p style={{ textAlign: 'center', fontSize: 15, color: '#6E6E73', marginBottom: 32 }}>
-          Sign in to submit your daily update
-        </p>
+        <div style={{ textAlign: 'center', marginBottom: 28 }}>
+          <img src="/meril-logo.svg" alt="Meril" style={{ height: 32, width: 'auto', display: 'inline-block', marginBottom: 16 }} />
+          <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.4px', marginBottom: 4, color: '#1D1D1F', fontFamily: FONT }}>
+            Daily Tracker
+          </h1>
+          <p style={{ fontSize: 14, color: '#6E6E73', fontFamily: FONT }}>
+            Sign in to submit your daily update
+          </p>
+        </div>
 
         {error && (
           <div style={{ background: 'rgba(255,59,48,0.08)', border: '1px solid rgba(255,59,48,0.2)', borderRadius: 10, padding: '11px 14px', fontSize: 14, color: '#CC0000', marginBottom: 16 }}>

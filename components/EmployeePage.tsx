@@ -296,8 +296,9 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
     <div style={{ minHeight: '100vh', fontFamily: FONT }}>
       {/* NavBar */}
       <nav className="navbar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div className="navbar-logo">📋</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <img src="/meril-logo.svg" alt="Meril" style={{ height: 20, width: 'auto', display: 'block' }} />
+          <div style={{ width: 1, height: 16, background: 'rgba(0,0,0,0.12)' }} />
           <span className="navbar-title">Daily Tracker</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
