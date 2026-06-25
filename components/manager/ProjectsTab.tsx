@@ -23,6 +23,8 @@ export default function ProjectsTab() {
   const [saving, setSaving] = useState(false)
   const [extendPid, setExtendPid] = useState<string | null>(null)
   const [extendDate, setExtendDate] = useState('')
+  const [editingName, setEditingName] = useState<string | null>(null)
+  const [editNameVal, setEditNameVal] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -107,6 +109,15 @@ export default function ProjectsTab() {
     if (!confirm('Mark this project as complete?')) return
     await fetch('/api/projects', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: pid, status: 'closed', end_date: TODAY }) })
     if (selected === pid) setSelected(null)
+    load()
+  }
+
+  async function renameProject(pid: string) {
+    const name = editNameVal.trim()
+    if (!name) return
+    const res = await fetch('/api/projects', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: pid, name }) })
+    if (!res.ok) { const d = await res.json(); alert(d.error || 'Failed to rename project.'); return }
+    setEditingName(null)
     load()
   }
 
@@ -234,18 +245,47 @@ export default function ProjectsTab() {
           return (
             <div key={p.id} onClick={() => setSelected(isAct ? null : p.id)}
               style={{ ...CARD, padding: '18px 20px', cursor: 'pointer', borderTop: `3px solid ${p.color}`, boxShadow: isAct ? `0 0 0 2.5px ${p.color}, 0 4px 20px rgba(0,0,0,0.1)` : '0 1px 0 rgba(0,0,0,0.04), 0 2px 16px rgba(0,0,0,0.05)', transition: 'box-shadow .15s' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span style={{ fontWeight: 700, fontSize: 14, fontFamily: FONT, color: '#1D1D1F' }}>{p.name}</span>
-                <div style={{ display: 'flex', gap: 4 }}>
-                  <button onClick={e => { e.stopPropagation(); archiveProject(p.id) }}
-                    style={{ padding: '2px 8px', background: 'rgba(0,0,0,0.05)', border: 'none', borderRadius: 980, fontSize: 11, cursor: 'pointer', color: '#6E6E73', fontFamily: FONT, whiteSpace: 'nowrap' }}>
-                    Complete
-                  </button>
-                  <button onClick={e => { e.stopPropagation(); deleteProject(p.id, p.name) }}
-                    style={{ padding: '2px 7px', background: 'rgba(255,59,48,0.08)', border: 'none', borderRadius: 980, fontSize: 13, cursor: 'pointer', color: '#FF3B30', fontFamily: FONT, lineHeight: 1 }}
-                    title="Delete project">
-                    🗑
-                  </button>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 4, gap: 8 }}>
+                {editingName === p.id
+                  ? <input
+                      autoFocus
+                      value={editNameVal}
+                      onChange={e => setEditNameVal(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.stopPropagation(); renameProject(p.id) } if (e.key === 'Escape') setEditingName(null) }}
+                      onClick={e => e.stopPropagation()}
+                      style={{ flex: 1, fontWeight: 700, fontSize: 14, fontFamily: FONT, color: '#1D1D1F', border: 'none', borderBottom: '1.5px solid #0071E3', outline: 'none', background: 'transparent', padding: '0 0 1px' }}
+                    />
+                  : <span style={{ fontWeight: 700, fontSize: 14, fontFamily: FONT, color: '#1D1D1F' }}>{p.name}</span>
+                }
+                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                  {editingName === p.id
+                    ? <>
+                        <button onClick={e => { e.stopPropagation(); renameProject(p.id) }}
+                          style={{ padding: '2px 8px', background: '#0071E3', color: 'white', border: 'none', borderRadius: 980, fontSize: 11, cursor: 'pointer', fontFamily: FONT }}>
+                          Save
+                        </button>
+                        <button onClick={e => { e.stopPropagation(); setEditingName(null) }}
+                          style={{ padding: '2px 7px', background: 'rgba(0,0,0,0.06)', border: 'none', borderRadius: 980, fontSize: 11, cursor: 'pointer', color: '#6E6E73', fontFamily: FONT }}>
+                          ✕
+                        </button>
+                      </>
+                    : <>
+                        <button onClick={e => { e.stopPropagation(); setEditingName(p.id); setEditNameVal(p.name) }}
+                          style={{ padding: '2px 7px', background: 'rgba(0,0,0,0.05)', border: 'none', borderRadius: 980, fontSize: 11, cursor: 'pointer', color: '#6E6E73', fontFamily: FONT }}
+                          title="Rename">
+                          ✏️
+                        </button>
+                        <button onClick={e => { e.stopPropagation(); archiveProject(p.id) }}
+                          style={{ padding: '2px 8px', background: 'rgba(0,0,0,0.05)', border: 'none', borderRadius: 980, fontSize: 11, cursor: 'pointer', color: '#6E6E73', fontFamily: FONT, whiteSpace: 'nowrap' }}>
+                          Complete
+                        </button>
+                        <button onClick={e => { e.stopPropagation(); deleteProject(p.id, p.name) }}
+                          style={{ padding: '2px 7px', background: 'rgba(255,59,48,0.08)', border: 'none', borderRadius: 980, fontSize: 13, cursor: 'pointer', color: '#FF3B30', fontFamily: FONT, lineHeight: 1 }}
+                          title="Delete">
+                          🗑
+                        </button>
+                      </>
+                  }
                 </div>
               </div>
               <div style={{ fontSize: 12, color: '#6E6E73', marginBottom: 8, fontFamily: FONT }}>
@@ -384,7 +424,13 @@ export default function ProjectsTab() {
                   style={{ padding: '16px 20px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, borderLeft: `3px solid ${p.color}` }}>
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 3 }}>
-                      <span style={{ fontWeight: 700, fontSize: 14, fontFamily: FONT }}>{p.name}</span>
+                      {editingName === p.id
+                        ? <input autoFocus value={editNameVal} onChange={e => setEditNameVal(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') { e.stopPropagation(); renameProject(p.id) } if (e.key === 'Escape') setEditingName(null) }}
+                            onClick={e => e.stopPropagation()}
+                            style={{ fontWeight: 700, fontSize: 14, fontFamily: FONT, border: 'none', borderBottom: '1.5px solid #0071E3', outline: 'none', background: 'transparent', padding: '0 0 1px', minWidth: 120 }} />
+                        : <span style={{ fontWeight: 700, fontSize: 14, fontFamily: FONT }}>{p.name}</span>
+                      }
                       {overdue && <span style={{ padding: '1px 7px', borderRadius: 980, fontSize: 10, fontWeight: 700, background: 'rgba(255,59,48,0.1)', color: '#FF3B30', fontFamily: FONT }}>Missed Deadline</span>}
                       {onTime && <span style={{ padding: '1px 7px', borderRadius: 980, fontSize: 10, fontWeight: 700, background: 'rgba(52,199,89,0.1)', color: '#34C759', fontFamily: FONT }}>On Time</span>}
                       {!overdue && !onTime && <span style={{ padding: '1px 7px', borderRadius: 980, fontSize: 10, fontWeight: 700, background: '#F2F2F7', color: '#6E6E73', fontFamily: FONT }}>Completed</span>}
@@ -393,10 +439,27 @@ export default function ProjectsTab() {
                       Lead: <strong style={{ color: '#1D1D1F' }}>{lead?.name || p.lead}</strong> · {allE.length} entries{totT > 0 ? ` · ${totT}h` : ''}
                     </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {editingName === p.id
+                      ? <>
+                          <button onClick={e => { e.stopPropagation(); renameProject(p.id) }}
+                            style={{ padding: '2px 8px', background: '#0071E3', color: 'white', border: 'none', borderRadius: 980, fontSize: 11, cursor: 'pointer', fontFamily: FONT }}>
+                            Save
+                          </button>
+                          <button onClick={e => { e.stopPropagation(); setEditingName(null) }}
+                            style={{ padding: '2px 7px', background: 'rgba(0,0,0,0.06)', border: 'none', borderRadius: 980, fontSize: 11, cursor: 'pointer', color: '#6E6E73', fontFamily: FONT }}>
+                            ✕
+                          </button>
+                        </>
+                      : <button onClick={e => { e.stopPropagation(); setEditingName(p.id); setEditNameVal(p.name) }}
+                          style={{ padding: '2px 7px', background: 'rgba(0,0,0,0.05)', border: 'none', borderRadius: 980, fontSize: 11, cursor: 'pointer', color: '#6E6E73', fontFamily: FONT }}
+                          title="Rename">
+                          ✏️
+                        </button>
+                    }
                     <button onClick={e => { e.stopPropagation(); deleteProject(p.id, p.name) }}
-                      style={{ padding: '3px 8px', background: 'rgba(255,59,48,0.08)', border: 'none', borderRadius: 980, fontSize: 13, cursor: 'pointer', color: '#FF3B30', fontFamily: FONT, lineHeight: 1 }}
-                      title="Delete project">
+                      style={{ padding: '3px 7px', background: 'rgba(255,59,48,0.08)', border: 'none', borderRadius: 980, fontSize: 13, cursor: 'pointer', color: '#FF3B30', fontFamily: FONT, lineHeight: 1 }}
+                      title="Delete">
                       🗑
                     </button>
                     <span style={{ color: '#AEAEB2', fontSize: 11 }}>{isOpen ? '▲' : '▼'}</span>
