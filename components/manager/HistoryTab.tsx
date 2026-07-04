@@ -3,8 +3,9 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { Entry, Employee, Project, Comment } from '@/lib/types'
 import { FONT, CARD, fmtDate } from '@/lib/ui'
 import EntryRow from './EntryRow'
+import { todayIST } from '@/lib/dates'
 
-const TODAY = new Date().toISOString().slice(0, 10)
+const TODAY = todayIST()
 
 function fmtShort(s: string) {
   return new Date(s + 'T12:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })

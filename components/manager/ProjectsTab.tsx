@@ -2,8 +2,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { Project, Employee, Entry } from '@/lib/types'
 import { FONT, CARD, fmtDate } from '@/lib/ui'
+import { todayIST } from '@/lib/dates'
 
-const TODAY = new Date().toISOString().slice(0, 10)
+const TODAY = todayIST()
 const COLORS = ['#6366F1', '#0EA5E9', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6']
 
 function slugify(name: string) {

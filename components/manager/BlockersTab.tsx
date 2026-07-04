@@ -2,13 +2,14 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { Entry, Project } from '@/lib/types'
 import { FONT, CARD } from '@/lib/ui'
+import { todayIST } from '@/lib/dates'
 
 function fmtDate(s: string) {
   return new Date(s + 'T12:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
 }
 
 function dayAge(dateStr: string) {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayIST()
   const diff = Math.floor((new Date(today + 'T12:00:00').getTime() - new Date(dateStr + 'T12:00:00').getTime()) / 86400000)
   return diff
 }
@@ -36,7 +37,7 @@ export default function BlockersTab() {
     setLoading(true)
     try {
       const from = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
-      const to = new Date().toISOString().slice(0, 10)
+      const to = todayIST()
       const [ents, projs, res] = await Promise.all([
         fetch(`/api/entries?from=${from}&to=${to}`).then(r => r.json()),
         fetch('/api/projects').then(r => r.json()),

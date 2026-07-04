@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { todayIST } from '@/lib/dates'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -51,6 +52,21 @@ export async function POST(req: NextRequest) {
   }
 
   const admin = supabaseAdmin()
+
+  // The commitments loop is the core discipline: employees must close out
+  // due follow-ups before submitting a new update (manager on-behalf is exempt).
+  if (role !== 'manager') {
+    const { data: openDue } = await admin.from('commitments')
+      .select('id')
+      .eq('employee_id', employee_id)
+      .eq('status', 'open')
+      .lte('due_date', todayIST())
+      .limit(1)
+    if (openDue && openDue.length > 0) {
+      return NextResponse.json({ error: 'Close out your open commitments before submitting today\'s update.' }, { status: 400 })
+    }
+  }
+
   const id = crypto.randomUUID()
   const { data, error } = await admin.from('entries').insert([{
     id,
@@ -82,14 +98,15 @@ export async function PATCH(req: NextRequest) {
 
   const admin = supabaseAdmin()
 
-  // Single read for both ownership and the edit-limit check.
-  const { data: existing } = await admin.from('entries').select('employee_id, submit_count').eq('id', id).single()
+  // Single read for both ownership and the end-of-day lock check.
+  const { data: existing } = await admin.from('entries').select('employee_id, date').eq('id', id).single()
   if (!existing) return NextResponse.json({ error: 'Entry not found' }, { status: 404 })
   if (role !== 'manager' && existing.employee_id !== userId) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
-  if (submit_count !== undefined && (existing.submit_count ?? 1) >= 2) {
-    return NextResponse.json({ error: 'Edit limit reached. You can only edit your submission once.' }, { status: 403 })
+  // Entries are editable until the end of their day (IST), then locked (PRD §13).
+  if (role !== 'manager' && existing.date !== todayIST()) {
+    return NextResponse.json({ error: 'This update is locked. Entries can only be edited on the day they were submitted.' }, { status: 403 })
   }
 
   const updates: Record<string, unknown> = { timestamp: new Date().toISOString() }

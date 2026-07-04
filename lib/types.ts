@@ -11,12 +11,41 @@ export interface Employee {
   created_at?: string
 }
 
+export type AttachmentType = 'image' | 'file' | 'link'
+
+export interface Attachment {
+  type: AttachmentType
+  url: string
+  name: string
+}
+
 export interface ProjectTask {
   project_id: string
   task: string
   time: string
   status: TaskStatus
   blockers: string
+  what_changed?: string
+  attachments?: Attachment[]
+}
+
+export type CommitmentHorizon = 'day' | 'week'
+export type CommitmentStatus = 'open' | 'done' | 'partial' | 'missed'
+
+export interface Commitment {
+  id: string
+  employee_id: string
+  employee_name: string
+  project_id: string | null
+  horizon: CommitmentHorizon
+  text: string
+  due_date: string
+  created_in_entry_id: string | null
+  status: CommitmentStatus
+  outcome_note: string | null
+  resolved_at: string | null
+  carry_count: number
+  created_at: string
 }
 
 export interface Entry {

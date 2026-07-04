@@ -4,7 +4,9 @@ import { Entry, Employee, Project, ProjectTask, Workload, Session, Comment } fro
 import { FONT, CARD } from '@/lib/ui'
 import EntryRow from './EntryRow'
 
-const TODAY = () => new Date().toISOString().slice(0, 10)
+import { todayIST } from '@/lib/dates'
+
+const TODAY = todayIST
 
 function emptyMgrTask(): { uid: number; project_id: string; task: string; time: string; status: 'in_progress' | 'completed' | 'blocked' | 'carried'; blockers: string } {
   return { uid: Date.now() + Math.random(), project_id: '', task: '', time: '', status: 'in_progress', blockers: '' }

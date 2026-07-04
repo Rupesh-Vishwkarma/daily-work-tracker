@@ -2,15 +2,17 @@
 import { useState } from 'react'
 import { Session } from '@/lib/types'
 import TodayTab from './manager/TodayTab'
+import CommitmentsTab from './manager/CommitmentsTab'
 import BlockersTab from './manager/BlockersTab'
 import ProjectsTab from './manager/ProjectsTab'
 import HistoryTab from './manager/HistoryTab'
 import SettingsTab from './manager/SettingsTab'
 
-type Tab = 'today' | 'blockers' | 'projects' | 'history' | 'settings'
+type Tab = 'today' | 'commitments' | 'blockers' | 'projects' | 'history' | 'settings'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'today', label: 'Today' },
+  { id: 'commitments', label: 'Commitments' },
   { id: 'blockers', label: 'Blockers' },
   { id: 'projects', label: 'Projects' },
   { id: 'history', label: 'History' },
@@ -55,6 +57,7 @@ export default function ManagerPage({ session, onLogout }: { session: Session; o
         </div>
 
         {tab === 'today' && <TodayTab managerSession={session} />}
+        {tab === 'commitments' && <CommitmentsTab />}
         {tab === 'blockers' && <BlockersTab />}
         {tab === 'projects' && <ProjectsTab />}
         {tab === 'history' && <HistoryTab />}

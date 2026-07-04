@@ -133,6 +133,25 @@ export default function EntryRow({
                   {task.time && <span style={{ fontSize: 11, color: '#AEAEB2', fontFamily: FONT }}>{task.time}</span>}
                 </div>
                 <div style={{ fontSize: 13, color: '#1D1D1F', lineHeight: 1.5, fontFamily: FONT }}>{task.task}</div>
+                {task.what_changed && (
+                  <div style={{ fontSize: 12, color: '#3C3C43', marginTop: 6, padding: '6px 10px', background: 'rgba(0,113,227,0.05)', borderRadius: 6, borderLeft: '2px solid rgba(0,113,227,0.35)', fontFamily: FONT, lineHeight: 1.5 }}>
+                    <span style={{ fontWeight: 700, color: '#0071E3', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>What changed · </span>{task.what_changed}
+                  </div>
+                )}
+                {(task.attachments?.length || 0) > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                    {(task.attachments || []).map((a, ai) => a.type === 'image' ? (
+                      <a key={ai} href={a.url} target="_blank" rel="noreferrer">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={a.url} alt={a.name} style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, display: 'block', border: '1px solid rgba(0,0,0,0.08)' }} />
+                      </a>
+                    ) : (
+                      <a key={ai} href={a.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#0071E3', textDecoration: 'none', background: 'white', borderRadius: 6, padding: '4px 8px', fontFamily: FONT, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {a.type === 'link' ? '🔗 ' : '📄 '}{a.name || a.url}
+                      </a>
+                    ))}
+                  </div>
+                )}
                 {task.blockers && (
                   <div style={{ fontSize: 12, color: '#B25900', marginTop: 6, padding: '4px 8px', background: 'rgba(255,149,0,0.08)', borderRadius: 6, fontFamily: FONT }}>
                     Blocker: {task.blockers}

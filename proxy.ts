@@ -10,6 +10,7 @@ const MANAGER_ONLY: { prefix: string; methods: string[] }[] = [
   { prefix: '/api/reviewed', methods: ['GET', 'POST', 'DELETE'] },
   { prefix: '/api/resolved-blockers', methods: ['GET', 'POST', 'DELETE'] },
   { prefix: '/api/entries', methods: ['DELETE'] },
+  { prefix: '/api/commitments', methods: ['DELETE'] },
 ]
 
 export async function proxy(req: NextRequest) {
