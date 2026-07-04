@@ -4,8 +4,6 @@ import { Employee } from '@/lib/types'
 
 export default function SettingsTab() {
   const [employees, setEmployees] = useState<Employee[]>([])
-  const [editingPw, setEditingPw] = useState<Record<string, string>>({})
-  const [showEditFor, setShowEditFor] = useState<string | null>(null)
   const [newName, setNewName] = useState('')
   const [newUser, setNewUser] = useState('')
   const [newPw, setNewPw] = useState('')
@@ -13,17 +11,14 @@ export default function SettingsTab() {
   const [broadcast, setBroadcast] = useState({ message: '', active: false })
   const [broadcastSaving, setBroadcastSaving] = useState(false)
   const [broadcastMsg, setBroadcastMsg] = useState<string | null>(null)
-  const [entryCount, setEntryCount] = useState(0)
 
   const load = useCallback(async () => {
-    const [empRes, entRes, bRes] = await Promise.all([
+    const [empRes, bRes] = await Promise.all([
       fetch('/api/employees'),
-      fetch(`/api/entries?from=2020-01-01&to=${new Date().toISOString().slice(0, 10)}`),
       fetch('/api/broadcast'),
     ])
-    const [empData, entData, bData] = await Promise.all([empRes.json(), entRes.json(), bRes.json()])
+    const [empData, bData] = await Promise.all([empRes.json(), bRes.json()])
     setEmployees((empData.employees || []).filter((e: Employee) => e.role === 'employee'))
-    setEntryCount((entData.entries || []).length)
     setBroadcast({ message: bData.message || '', active: bData.active || false })
   }, [])
 
@@ -38,12 +33,13 @@ export default function SettingsTab() {
     } finally { setBroadcastSaving(false) }
   }
 
-  async function savePassword(empId: string) {
-    const pw = editingPw[empId]?.trim()
-    if (!pw) return
-    await fetch('/api/employees', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: empId, password: pw }) })
-    setShowEditFor(null)
-    load()
+  async function resetPassword(empId: string, name: string) {
+    const pw = window.prompt(`Set a new password for ${name}:`)
+    if (pw === null) return
+    if (!pw.trim()) { alert('Password cannot be empty.'); return }
+    const res = await fetch('/api/employees', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: empId, password: pw.trim() }) })
+    if (!res.ok) { alert('Failed to update password.'); return }
+    alert(`Password updated for ${name}. Share it with them directly.`)
   }
 
   async function addEmployee() {
@@ -59,18 +55,6 @@ export default function SettingsTab() {
   async function removeEmployee(id: string, name: string) {
     if (!confirm(`Remove "${name}" from the team? Their entries will be kept.`)) return
     await fetch(`/api/employees?id=${id}`, { method: 'DELETE' })
-    load()
-  }
-
-  async function clearAllData() {
-    if (!confirm('⚠️ Permanently delete ALL work entries? Employee accounts are kept.\n\nAre you sure?')) return
-    const res = await fetch(`/api/entries?from=2020-01-01&to=2099-12-31`)
-    if (!res.ok) { alert('Failed to load entries. No data deleted.'); return }
-    const data = await res.json()
-    const ids: { id: string }[] = data.entries || []
-    if (ids.length === 0) { alert('No entries found.'); return }
-    await Promise.all(ids.map(e => fetch(`/api/entries?id=${e.id}`, { method: 'DELETE' })))
-    alert(`Cleared ${ids.length} entries.`)
     load()
   }
 
@@ -109,7 +93,7 @@ export default function SettingsTab() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ borderBottom: '2px solid var(--border)' }}>
-                {['#', 'Name', 'Username', 'Password', 'Actions'].map(h => (
+                {['#', 'Name', 'Username', 'Actions'].map(h => (
                   <th key={h} style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text3)', fontWeight: 600 }}>{h}</th>
                 ))}
               </tr>
@@ -120,31 +104,15 @@ export default function SettingsTab() {
                 <td style={{ padding: '10px 12px', fontWeight: 600 }}>Manager</td>
                 <td style={{ padding: '10px 12px', color: 'var(--text3)' }}>Manager</td>
                 <td style={{ padding: '10px 12px', color: 'var(--text4)', fontSize: 12 }}>Supabase Auth</td>
-                <td style={{ padding: '10px 12px', color: 'var(--text4)', fontSize: 12 }}>Built-in</td>
               </tr>
               {employees.map((e, i) => (
                 <tr key={e.id} style={{ borderBottom: '1px solid var(--border)' }}>
                   <td style={{ padding: '10px 12px', color: 'var(--text4)' }}>{i + 1}</td>
                   <td style={{ padding: '10px 12px', fontWeight: 600 }}>{e.name}</td>
                   <td style={{ padding: '10px 12px', color: 'var(--text3)', fontFamily: 'monospace' }}>{e.username}</td>
-                  <td style={{ padding: '10px 12px', fontFamily: 'monospace', background: 'var(--bg)' }}>
-                    {showEditFor === e.id
-                      ? <input type="text" value={editingPw[e.id] ?? e.password}
-                          onChange={ev => setEditingPw(p => ({ ...p, [e.id]: ev.target.value }))}
-                          style={{ width: 140, padding: '4px 8px', fontSize: 13, fontFamily: 'monospace' }}
-                          onKeyDown={ev => { if (ev.key === 'Enter') savePassword(e.id); if (ev.key === 'Escape') setShowEditFor(null) }}
-                          autoFocus />
-                      : <span style={{ fontSize: 13 }}>{e.password}</span>}
-                  </td>
                   <td style={{ padding: '10px 12px' }}>
                     <div style={{ display: 'flex', gap: 6 }}>
-                      {showEditFor === e.id
-                        ? <>
-                            <button className="btn btn-sm" style={{ background: 'var(--green)', color: 'white' }} onClick={() => savePassword(e.id)}>✓ Save</button>
-                            <button className="btn btn-secondary btn-sm" onClick={() => setShowEditFor(null)}>✕</button>
-                          </>
-                        : <button className="btn btn-secondary btn-sm" onClick={() => { setShowEditFor(e.id); setEditingPw(p => ({ ...p, [e.id]: e.password })) }}>🔑 Edit</button>
-                      }
+                      <button className="btn btn-secondary btn-sm" onClick={() => resetPassword(e.id, e.name)}>🔑 Reset password</button>
                       <button className="btn btn-danger btn-sm" onClick={() => removeEmployee(e.id, e.name)}>Remove</button>
                     </div>
                   </td>
@@ -176,12 +144,6 @@ export default function SettingsTab() {
         </div>
       </div>
 
-      {/* Data management */}
-      <div className="card card-p">
-        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>📦 Data</div>
-        <p style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 12 }}>Total entries in database: <strong style={{ color: 'var(--text)' }}>{entryCount}</strong></p>
-        <button className="btn btn-danger btn-sm" onClick={clearAllData}>🗑 Clear All Entries</button>
-      </div>
     </div>
   )
 }

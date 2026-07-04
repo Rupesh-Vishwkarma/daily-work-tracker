@@ -11,7 +11,6 @@ const TASK_STATUS: Record<TaskStatus, { label: string; color: string; bg: string
   completed:   { label: 'Done',        color: '#34C759', bg: 'rgba(52,199,89,0.1)' },
   in_progress: { label: 'In Progress', color: '#0071E3', bg: 'rgba(0,113,227,0.1)' },
   blocked:     { label: 'Blocked',     color: '#FF3B30', bg: 'rgba(255,59,48,0.1)' },
-  carried:     { label: 'Carries →',   color: '#FF9500', bg: 'rgba(255,149,0,0.1)' },
 }
 const WL: Record<Workload, { label: string; color: string; bg: string }> = {
   light:  { label: 'Light',  color: '#34C759', bg: 'rgba(52,199,89,0.1)' },
@@ -719,7 +718,6 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
                             <option value="in_progress">In Progress</option>
                             <option value="completed">Completed</option>
                             <option value="blocked">Blocked</option>
-                            <option value="carried">Carried →</option>
                           </select>
 
                           <button onClick={() => toggleBlockers(idx)} style={{ fontSize: 12, color: t.showBlockers ? '#FF9500' : '#AEAEB2', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: FONT, fontWeight: 500 }}>

@@ -8,7 +8,7 @@ import { todayIST } from '@/lib/dates'
 
 const TODAY = todayIST
 
-function emptyMgrTask(): { uid: number; project_id: string; task: string; time: string; status: 'in_progress' | 'completed' | 'blocked' | 'carried'; blockers: string } {
+function emptyMgrTask(): { uid: number; project_id: string; task: string; time: string; status: 'in_progress' | 'completed' | 'blocked'; blockers: string } {
   return { uid: Date.now() + Math.random(), project_id: '', task: '', time: '', status: 'in_progress', blockers: '' }
 }
 
@@ -62,7 +62,6 @@ function SubmitOnBehalfModal({ employee, projects, onClose, onDone }: {
                   <option value="in_progress">In Progress</option>
                   <option value="completed">Done</option>
                   <option value="blocked">Blocked</option>
-                  <option value="carried">Carried</option>
                 </select>
                 <input type="text" value={t.time} onChange={e => updateTask(t.uid, 'time', e.target.value)}
                   placeholder="3h" style={{ padding: '7px 8px', fontSize: 13, borderRadius: 7, border: 'none', fontFamily: FONT, background: 'white', outline: 'none' }} />
@@ -276,12 +275,11 @@ export default function TodayTab({ managerSession }: { managerSession: Session }
                   {projects.filter(p => p.status === 'active').map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   <option value="__other__">Other Work</option>
                 </select>
-                <select value={t.status} onChange={e => setMgrTasks(prev => prev.map(x => x.uid === t.uid ? { ...x, status: e.target.value as 'in_progress' | 'completed' | 'blocked' | 'carried' } : x))}
+                <select value={t.status} onChange={e => setMgrTasks(prev => prev.map(x => x.uid === t.uid ? { ...x, status: e.target.value as 'in_progress' | 'completed' | 'blocked' } : x))}
                   style={{ padding: '7px 10px', fontSize: 12, borderRadius: 7, border: 'none', fontFamily: FONT, background: 'white', outline: 'none' }}>
                   <option value="in_progress">In Progress</option>
                   <option value="completed">Completed</option>
                   <option value="blocked">Blocked</option>
-                  <option value="carried">Carried</option>
                 </select>
                 <input type="text" value={t.time} onChange={e => setMgrTasks(prev => prev.map(x => x.uid === t.uid ? { ...x, time: e.target.value } : x))}
                   placeholder="3h" style={{ width: 56, padding: '7px 10px', fontSize: 13, borderRadius: 7, border: 'none', fontFamily: FONT, background: 'white', outline: 'none' }} />

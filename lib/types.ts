@@ -1,12 +1,12 @@
 export type Role = 'manager' | 'employee'
 export type Workload = 'light' | 'medium' | 'heavy'
-export type TaskStatus = 'in_progress' | 'completed' | 'blocked' | 'carried'
+export type TaskStatus = 'in_progress' | 'completed' | 'blocked'
 
 export interface Employee {
   id: string
   username: string
   name: string
-  password: string
+  password?: string
   role: Role
   created_at?: string
 }

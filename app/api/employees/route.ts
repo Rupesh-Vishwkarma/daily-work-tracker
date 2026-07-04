@@ -3,7 +3,8 @@ import { supabaseAdmin } from '@/lib/supabase'
 
 export async function GET() {
   const admin = supabaseAdmin()
-  const { data, error } = await admin.from('employees').select('id,username,name,password,role,created_at').order('name')
+  // Never expose stored passwords to the client (manager resets via PATCH).
+  const { data, error } = await admin.from('employees').select('id,username,name,role,created_at').order('name')
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ employees: data })
 }

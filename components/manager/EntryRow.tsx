@@ -13,7 +13,6 @@ const TS = {
   in_progress: { color: '#0071E3', label: 'In Progress' },
   completed: { color: '#34C759', label: 'Done' },
   blocked: { color: '#FF3B30', label: 'Blocked' },
-  carried: { color: '#FF9500', label: 'Carried →' },
 } as const
 
 
