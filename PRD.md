@@ -1,26 +1,43 @@
-# Product Requirements Document — Meril Daily Work Tracker
+# Product Requirements Document & Blueprint — Meril Daily Work Tracker
 
 | Field | Value |
 |-------|-------|
 | Product | Meril Daily Work Tracker (Team Tracking System) |
 | Owner | Rupesh Vishwkarma |
-| Current version | 5.0.0 |
+| Current version | 6.0.0 (`v6`, commit `3997f19`) |
 | Repository | github.com/Rupesh-Vishwkarma/daily-work-tracker |
 | Hosting | Vercel (auto-deploy from `main`) |
-| Backend | Supabase (PostgreSQL + Supabase Auth) |
+| Backend | Supabase (PostgreSQL + Supabase Auth + Storage) |
+| Frontend | Next.js 16 (App Router), React 19, TypeScript 5 |
+| Timezone | IST (UTC+5:30); working week Monday–Saturday |
 | Status | Live, internal team use |
-| Document purpose | Capture the as-built product, then define the target for an enterprise-grade version |
+| Document purpose | **Complete blueprint** — the as-built product end to end, the full change history, and the forward roadmap |
+
+---
+
+## 0. How to read this document
+
+This is the single source of truth for the project. It has three layers:
+
+1. **As-built (§1–§9)** — exactly what exists and runs today at `v6`.
+2. **Change history (§10)** — every commit, change, and fix from first commit to `v6`, so anyone can reconstruct how the product got here.
+3. **Forward roadmap (§11–§16)** — what's deferred and planned (email automation, Zoho, enterprise hardening), plus success metrics and open questions.
 
 ---
 
 ## 1. Overview
 
-The Daily Work Tracker is an internal web app for a Meril Life Sciences engineering/XR team. Employees log a daily work update (tasks, project, hours, status, blockers, workload). A single manager reviews submissions, tracks projects and deadlines, surfaces blockers, broadcasts announcements, and manages the team roster.
+The Daily Work Tracker is an internal web app for a Meril Life Sciences engineering/XR team (~10 members, one manager). Employees log a daily work update — tasks with project, status, optional hours, "what changed since yesterday," blockers, and attachments — and make **commitments** (a daily and a weekly promise) that the app follows up on the next working day. A single manager reviews submissions, tracks projects and deadlines, surfaces blockers, monitors commitment reliability, broadcasts announcements, and manages the team roster.
 
-It began as a single static HTML file (`daily_work_tracker.html`, `index-v4.html` at the repo root — legacy) and was rebuilt as a Next.js app in `app/`, backed by Supabase, with a security-hardening pass in v5.
+It began as a static HTML prototype (`daily_work_tracker.html`, `index-v4.html` at the repo root — legacy) and was rebuilt as a Next.js app in `app/`, backed by Supabase. `v6` added the commitments accountability loop, progress evidence (attachments + what-changed), IST/Mon–Sat date logic, and a full rebrand to the Meril Academy design system.
 
 ### Vision
-A fast, low-friction daily standup replacement that gives one manager a clear, real-time picture of what the team is doing, where time goes, and what's blocked — without the overhead of a heavyweight project management tool.
+A fast, low-friction daily standup replacement that gives one manager a clear, real-time picture of what the team is doing, where progress is being made, and what's blocked — grounded in **output and accountability**, not hours or surveillance.
+
+### Operating philosophy (drives every design decision)
+- **Output over hours.** Whether a task took 4h or 8h is irrelevant; completion and visible progress are the real signals. Hours are kept but optional and de-emphasized.
+- **Deadlines are commitments, not suggestions.** Keep deadlines stable; make any change explicit and accountable; alert early when at risk instead of quietly extending.
+- **No idle time, framed as "unblock people."** Every member should be meaningfully engaged and progressing. Surface who is blocked/stalled — not to "catch idlers," but to remove blockers.
 
 ---
 
@@ -28,88 +45,88 @@ A fast, low-friction daily standup replacement that gives one manager a clear, r
 
 - Managers lack a consolidated, daily view of who did what, how loaded people are, and what's blocking progress.
 - Verbal/standup or chat updates aren't searchable, aren't tied to projects, and produce no history or metrics.
+- Nothing holds a member accountable to what they *said* they'd do — there's no promise/follow-up loop.
 - Existing PM tools (Jira, etc.) are too heavy for a small team's daily check-in.
 
 ---
 
-## 3. Goals & non-goals
-
-### Goals (current)
-- One-tap daily submission for employees (<1 min to fill).
-- Manager gets same-day visibility: submitted vs pending, workload distribution, blockers.
-- Per-project time and contribution tracking.
-- Historical views (calendar, weekly, per-person, list) with CSV export.
-- Role-based access with a secure session model.
-
-### Non-goals (current)
-- Not a full project/task management tool (no kanban, dependencies, sprints).
-- Not multi-tenant — built for a single team with a single manager.
-- No mobile native app (responsive web only).
-- No integrations (Slack/Teams/email) yet.
-
----
-
-## 4. Personas & roles
+## 3. Personas & roles
 
 | Role | Count | Capabilities |
 |------|-------|--------------|
-| Manager | 1 (fixed account) | Full read of all entries; review + note; manage projects, deadlines, teams; manage employees & passwords; broadcast; submit on behalf / mark absent; clear data; CSV export |
-| Employee | N | Submit/edit own daily update (edit once); view own history & stats; see manager notes & broadcasts |
+| Manager | 1 (fixed account) | Full read of all entries; review + note; manage projects, deadlines, teams; add/remove employees and **reset** passwords; broadcast; submit on behalf / mark absent; view commitment reliability & blockers; CSV export |
+| Employee | N (~10) | Submit/edit own daily update (editable until end of day IST); follow up on and make commitments; attach evidence; view own history, stats & reliability; see manager notes & broadcasts |
 
-The manager is a single hardcoded identity (`Manager` / `ai.merillife@gmail.com`) authenticated via Supabase Auth. Employees are rows in an `employees` table with plaintext passwords.
+The manager is a single hardcoded identity in `app/api/auth/login/route.ts`: login username **`Shorya`** (case-insensitive), authenticated against a fixed Supabase Auth account (`ai.merillife@gmail.com`), with a stable internal `id: 'manager'`. Employees are rows in an `employees` table. Passwords are stored in the `employees` table and are **never returned to the client** — the manager resets them, they are not displayed.
 
 ---
 
-## 5. Current architecture (as-built)
+## 4. As-built architecture (v6)
 
-### 5.1 Tech stack
-- **Framework:** Next.js 16.2.9 (App Router), React 19.2, TypeScript 5.
-- **Styling:** Inline styles + a small shared `lib/ui.ts` (FONT, CARD, `fmtDate`); some global CSS classes in `globals.css`. Apple/iOS-inspired "v4" design system (SF Pro, pill buttons, segmented controls). Tailwind v4 is a dependency but the UI is predominantly inline styles.
-- **DB/Auth:** Supabase (`@supabase/supabase-js`, `@supabase/ssr`). Anon client for manager auth; service-role admin client for all data access.
-- **Auth/session:** Custom signed session token (HMAC-SHA256 via Web Crypto), stored in an `httpOnly` cookie `dwt_auth`, 7-day expiry. Session summary also mirrored in `sessionStorage` for client rendering.
-- **Access control:** `proxy.ts` (Next middleware, matcher `/api/:path*`) verifies the session on every API request and enforces manager-only method/route rules; injects `x-user-id`, `x-user-role`, `x-user-name` headers downstream.
+### 4.1 Tech stack
+- **Framework:** Next.js 16.2.9 (App Router, Turbopack), React 19.2.4, TypeScript 5.
+- **Styling:** Inline styles + a shared `lib/ui.ts` (`FONT`, `BRAND`, `CARD`, `fmtDate`) and some global CSS in `globals.css`. Meril Academy design system — navy `#33398a`, navy-dark `#282d6e`, purple `#4b3e9d`, gold `#fdc814`, on `#f6f7fb`; **Manrope** typeface (loaded via `<link>` in `layout.tsx`). Tailwind v4 is a dependency but the UI is predominantly inline styles.
+- **DB/Auth/Storage:** Supabase (`@supabase/supabase-js`, `@supabase/ssr`). Anon client for manager auth; service-role admin client (lazy singleton) for all data access. Storage bucket `attachments` (public) for screenshots/files.
+- **Auth/session:** Custom signed session token (HMAC-SHA256 via Web Crypto in `lib/auth.ts`), stored in an `httpOnly` cookie `dwt_auth`, 7-day expiry, `sameSite=lax`, `secure` in production. Session summary mirrored in `sessionStorage` for client rendering.
+- **Access control:** `proxy.ts` — the Next 16 middleware (renamed convention; exports `proxy` + `config.matcher = '/api/:path*'`). Verifies the session on every API request, enforces manager-only method/route rules, and injects `x-user-id`, `x-user-role`, `x-user-name` headers downstream. Confirmed active in the build output as `ƒ Proxy (Middleware)`.
+- **Dates:** `lib/dates.ts` — all product dates run on **IST (UTC+5:30)** with a **Mon–Sat working week** (only Sunday is non-working). Provides `todayIST`, `isWorkingDay`, `nextWorkingDay`, `prevWorkingDay`, `workingDaysBetween`, `weekMonday`, `weekSaturday`.
 
-### 5.2 App structure
+### 4.2 App structure
 ```
 app/
   app/
-    layout.tsx, page.tsx, globals.css, icon.svg, favicon.ico
+    layout.tsx        (loads Manrope; metadata)
+    page.tsx          (client; session gate → Login/Employee/Manager)
+    globals.css       (brand CSS variables, buttons, chips, alerts)
+    icon.svg, favicon
     api/
       auth/login, auth/logout
-      broadcast, comments, employees, entries, projects,
+      entries, commitments, attachments
+      projects, employees, comments, broadcast,
       reviewed, resolved-blockers
   components/
-    LoginPage, EmployeePage, ManagerPage
-    manager/ TodayTab, BlockersTab, ProjectsTab, HistoryTab, SettingsTab, EntryRow
-  lib/ auth.ts, supabase.ts, types.ts, ui.ts
+    LoginPage.tsx, EmployeePage.tsx, ManagerPage.tsx
+    manager/ TodayTab, CommitmentsTab, BlockersTab,
+             ProjectsTab, HistoryTab, SettingsTab, EntryRow
+  lib/ auth.ts, dates.ts, supabase.ts, types.ts, ui.ts, upload.ts
   proxy.ts
-  supabase_schema.sql, supabase_schema_v2.sql
+  scripts/ seed-test-data.mjs, clear-test-data.mjs
+  supabase_schema.sql, supabase_schema_v2.sql, supabase_schema_v3.sql
 ```
-`app/page.tsx` is a client component that switches between `LoginPage`, `EmployeePage`, and `ManagerPage` based on session role.
 
-### 5.3 Data model (Supabase, `supabase_schema_v2.sql`)
+### 4.3 Data model (Supabase)
+
+Applied in order: `supabase_schema.sql` (v1) → `supabase_schema_v2.sql` → `supabase_schema_v3.sql`. RLS is disabled on all tables; the service-role key + `proxy.ts` are the only access gate.
 
 | Table | Key fields | Notes |
 |-------|-----------|-------|
-| `employees` | id, username, name, password, role, created_at | Password is plaintext; id = lowercase username |
-| `entries` | id (uuid), employee_id, employee_name, date, workload, timestamp, submit_count, is_absent, submitted_by_manager, project_tasks (jsonb) | One per employee per day (by convention, not enforced); `project_tasks` capped at 50 |
+| `employees` | id, username, name, password, role, created_at | id = lowercase username; password never sent to client |
+| `entries` | id, employee_id, employee_name, date, workload, timestamp, submit_count, is_absent, submitted_by_manager, project_tasks (jsonb) | One per employee per day (by convention); `project_tasks` capped at 50; `submit_count` increments on each edit |
+| `commitments` | id, employee_id, employee_name, project_id, horizon, text, due_date, created_in_entry_id, status, outcome_note, resolved_at, carry_count, created_at | The promise→follow-up→delivered loop (§6) |
 | `projects` | id, name, color, lead, members (jsonb), start_date, deadline, end_date, status, previous_deadlines (jsonb), created_at | status: active/closed |
 | `comments` | id, entry_id, text, author, timestamp | Manager notes on an entry |
 | `reviewed_entries` | entry_id, reviewed_at | Manager "reviewed" flag |
 | `resolved_blockers` | key (`entryId:taskIndex`), resolved_at | Blocker resolution state |
 | `broadcast` | id (=1), message, active, updated_at | Single-row announcement |
+| Storage `attachments` | public bucket | Screenshots/files; path `{userId}/{timestamp}-{safeName}` |
 
-`project_tasks` item shape: `{ project_id, task, time, status, blockers }` where status ∈ `in_progress | completed | blocked | carried`. RLS is disabled on all tables; the service-role key + proxy are the only access gate.
+**`project_tasks` item shape** (jsonb): `{ project_id, task, time, status, blockers, what_changed?, attachments? }` where `status ∈ in_progress | completed | blocked` and each attachment is `{ type: 'image' | 'file' | 'link', url, name }`.
 
-### 5.4 API surface
+**`commitments` enums:** `horizon ∈ day | week`; `status ∈ open | done | partial | missed`. `project_id` may be a real id, `'__other__'` (Other Work), or null.
+
+### 4.4 API surface
+
+All routes sit behind `proxy.ts`. "any (scoped)" = authenticated; employees are server-scoped to their own rows via `x-user-id` regardless of query params.
 
 | Route | Methods | Auth | Purpose |
 |-------|---------|------|---------|
-| `/api/auth/login` | POST | public | Manager (Supabase Auth) or employee (table) login; sets cookie |
+| `/api/auth/login` | POST | public | Manager (Supabase Auth) or employee (table) login; sets signed cookie |
 | `/api/auth/logout` | POST | any | Clear cookie |
-| `/api/entries` | GET/POST/PATCH/DELETE | GET/POST/PATCH any (scoped); DELETE manager | Entries CRUD; employees scoped to own; edit limited to once (submit_count ≥ 2 blocked) |
+| `/api/entries` | GET/POST/PATCH/DELETE | GET/POST/PATCH any (scoped); DELETE manager | Entries CRUD; employees scoped to own; **edit-until-EOD** lock; commitment gate on POST |
+| `/api/commitments` | GET/POST/PATCH/DELETE | GET/POST/PATCH any (scoped); DELETE manager | Commitments loop; auto-carry on GET; resolve/carry on PATCH |
+| `/api/attachments` | POST | any (scoped) | Upload screenshot/file to Storage (≤2 MB, allowlisted types); returns public URL |
 | `/api/projects` | GET any; POST/PATCH/DELETE manager | Projects CRUD |
-| `/api/employees` | all manager | Roster + password management (returns plaintext password) |
+| `/api/employees` | all manager | Roster + password management; GET **excludes** password column |
 | `/api/comments` | GET any; POST/DELETE manager | Manager notes |
 | `/api/reviewed` | all manager | Reviewed flags |
 | `/api/resolved-blockers` | all manager | Blocker resolution |
@@ -117,317 +134,260 @@ app/
 
 ---
 
-## 6. Functional requirements (current, implemented)
+## 5. Functional requirements — Authentication & session
 
-### 6.1 Authentication
-- FR-A1: Single login form; username `Manager` routes to Supabase Auth, all others to the `employees` table.
-- FR-A2: On success, a signed HMAC session cookie (7-day) is set; role drives UI.
-- FR-A3: On app load, a stale pre-v5 session in `sessionStorage` is detected by probing `/api/broadcast`; a 401 clears it.
-- FR-A4: Any 401 during use should log the user out (documented intent).
-
-### 6.2 Employee
-- FR-E1: Submit today's update — add N tasks, each with project, free-text task, hours (0–24), status, optional blocker text; pick overall workload (light/medium/heavy).
-- FR-E2: Edit today's submission exactly once (`submit_count` enforced server-side, max 2).
-- FR-E3: View submitted state with confirmation card; see manager notes on entries.
-- FR-E4: "My Stats" — total updates, hours logged, completion rate, workload distribution, task outcomes, project breakdown (last 30 days window loaded).
-- FR-E5: Recent history (last 5 non-today entries) with manager notes.
-- FR-E6: See active broadcast banner (dismissible).
-- FR-E7: Project picker groups "My Projects" (member/lead) vs "Other Projects" vs "Other Work".
-
-### 6.3 Manager — Today
-- FR-M1: Stat cards (Submitted, Pending, Heavy, Medium, Light) that act as filters.
-- FR-M2: "Yet to Submit" list with per-employee "Absent" and "Submit on behalf" actions.
-- FR-M3: Expand an entry to view tasks; mark reviewed / unmark; add manager note.
-- FR-M4: Delete an entry.
-- FR-M5: Manager can log their own daily update.
-- FR-M6: Filter by employee name.
-
-### 6.4 Manager — Blockers
-- FR-B1: List all tasks in the last 30 days that are `blocked` OR have non-empty blocker text.
-- FR-B2: Age indicator (Today/Yesterday/Nd ago) with color escalation.
-- FR-B3: Resolve/reopen a blocker (persisted by `entryId:taskIndex` key).
-- FR-B4: Show/hide resolved.
-
-### 6.5 Manager — Projects
-- FR-P1: Create project (name→slug id, lead, members, start, deadline, color).
-- FR-P2: Per-project stats: today count, total submissions, last activity, total hours, per-member contributions.
-- FR-P3: Deadline alerts (overdue, due within 7 days).
-- FR-P4: Edit deadline (set or extend; keeps `previous_deadlines` history).
-- FR-P5: Inline rename; mark complete (archive with end_date); delete.
-- FR-P6: Edit team & lead; members who have logged work are locked from removal (🔒).
-- FR-P7: Completed projects section with on-time / missed-deadline badges and contribution bars.
-
-### 6.6 Manager — History
-- FR-H1: Calendar view (default) — workload dots per day, per-date submissions, missing-employee count.
-- FR-H2: Weekly dashboard — per-employee week nav, day-by-day hours, project time, completion rate, CSV.
-- FR-H3: People dashboard — per-employee reliability (submitted/working days %), output, workload mix, project table, period selector (week/month/3m/all).
-- FR-H4: List view — grouped by date, employee filter, CSV export, per-employee workload stat cards.
-- FR-H5: Date range with 7/30/90-day quick presets (list view).
-
-### 6.7 Manager — Settings
-- FR-S1: Broadcast editor (message + active toggle).
-- FR-S2: Team member table (shows plaintext passwords), edit password inline, remove member (entries kept).
-- FR-S3: Add employee (name, username, password).
-- FR-S4: Data — total entry count; "Clear All Entries" (fires N concurrent DELETEs).
+- **FR-A1:** Single login form. Username `Shorya` (case-insensitive) routes to Supabase Auth (fixed email); all others to the `employees` table (username lowercased, password compared).
+- **FR-A2:** On success, a signed HMAC session cookie (`dwt_auth`, 7-day) is set; role drives which UI renders.
+- **FR-A3:** On app load, a session in `sessionStorage` is validated by probing `/api/broadcast`; a 401 clears it and returns to login.
+- **FR-A4:** Logout clears the cookie server-side and the `sessionStorage` mirror.
+- **FR-A5:** `SESSION_SECRET` is used to sign tokens; it falls back to `SUPABASE_SERVICE_ROLE_KEY` if unset (should be set explicitly in production).
 
 ---
 
-## 7. Security model (current)
+## 6. Functional requirements — Commitments loop (the accountability core)
 
-- Server-side signed session cookie (`httpOnly`, HMAC-SHA256); role cannot be forged client-side.
-- Central enforcement in `proxy.ts`; manager-only routes/methods gated there.
-- Employees can only read/write their own entries (server-scoped by `x-user-id`).
-- Entry IDs are UUIDs (non-enumerable).
-- JSONB payload bounds (`project_tasks` ≤ 50).
-- Startup env validation for Supabase creds.
+Accountability comes from comparing what a member *promised* to what they *delivered*. The employee's daily flow is three steps.
 
-### Known security gaps
-- Employee passwords stored and transmitted in **plaintext**; manager Settings UI displays them.
-- No rate limiting on `/api/auth/login` (brute-force exposure).
-- No CSRF token (relies on `sameSite=lax` cookie).
-- RLS disabled — all DB security depends on the proxy + service-role key.
-- `SESSION_SECRET` falls back to the service-role key if unset.
-- No audit log of mutations.
-- No password reset flow (manager edits via Settings/Supabase console).
+**Step 1 — Follow up.** The app surfaces yesterday's (and earlier) open commitments due today or earlier. The employee marks each **Done / Partial / Missed**, or **Carry to next day** (daily only), with an optional outcome note. Submitting the day's update is **blocked** (client + server) until due commitments are resolved.
 
----
+**Step 2 — Log.** Enter today's work as task rows (§7.1).
 
-## 8. Non-functional characteristics (current)
-
-- **Performance:** Client-heavy; each tab fetches via multiple parallel `fetch`es. `EmployeePage` fetches comments per entry (N+1). No caching layer, no pagination.
-- **Scale:** Designed for one small team; history views load wide date ranges (e.g. `from=2024-01-01`) fully into the client.
-- **Availability:** Vercel + Supabase managed; no custom SLO.
-- **Accessibility:** Not audited; inline styles, limited semantic structure, no keyboard/ARIA guarantees.
-- **Observability:** `console.error` only; no metrics, tracing, or alerting.
-- **Testing:** No automated tests present.
-- **i18n:** English only; dates formatted `en-IN`.
-
----
-
-## 9. Known limitations / tech debt
-
-- Legacy static HTML files still tracked at repo root (`daily_work_tracker.html`, `index-v4.html`, `daily_work_tracker_v1.html`).
-- Two schema files (`v1`, `v2`); v2 is current.
-- One-entry-per-day is convention, not a DB constraint.
-- Styling split between inline styles and global CSS classes (inconsistent; Tailwind present but largely unused).
-- Bulk delete is N requests, not one endpoint.
-- Manager identity and email are hardcoded in the login route.
-- `sessionStorage` mirror of session can drift from the cookie.
-
----
-
-## 10. Gap analysis → enterprise-grade (input for brainstorming)
-
-The following are **candidate** improvement areas, grouped by theme. These are not yet committed requirements — they're the menu for the brainstorming session.
-
-### 10.1 Security & compliance
-- Hash passwords (bcrypt/argon2) or move fully to Supabase Auth / SSO (Google/Microsoft/SAML).
-- Remove plaintext password display; add self-service password reset.
-- Rate limiting + lockout on login; CSRF protection; security headers/CSP.
-- Enable Postgres RLS as defense-in-depth; scope service-role usage.
-- Audit logging for all mutations; data retention & export (GDPR-style).
-
-### 10.2 Multi-tenancy & roles
-- Support multiple teams/departments and multiple managers.
-- Role hierarchy (admin, manager, team lead, employee); org/team scoping.
-- Delegation / approver chains.
-
-### 10.3 Product depth
-- Task carry-over automation ("carried" → next day pre-fill).
-- Goals/OKRs, sprint or weekly targets, capacity planning.
-- Richer blockers: assignee, severity, SLA, escalation, comments thread.
-- Attachments/links on tasks and updates.
-- Templates and recurring tasks.
-
-### 10.4 Analytics & reporting
-- Manager overview dashboard across the whole team (currently per-employee).
-- Trends over time (velocity, utilization, blocker aging), exportable PDF/scheduled reports.
-- Per-project burn-up / timeline; time-tracking accuracy.
-
-### 10.5 Notifications & integrations
-- Email/Slack/Teams reminders for missing submissions and new blockers.
-- Broadcast delivery beyond in-app banner; read receipts.
-- Calendar / HRIS / SSO integrations; webhook/API for external tools.
-
-### 10.6 UX & platform
-- Mobile-first / PWA / offline submission.
-- Accessibility (WCAG) pass; dark mode; consistent design system (consolidate on Tailwind or a component lib).
-- Performance: server-side data fetching, pagination, caching, remove N+1 comment fetches.
-
-### 10.7 Engineering quality
-- Automated tests (unit/integration/e2e), CI checks, preview environments.
-- Typed API layer / shared schema validation (e.g. Zod).
-- Enforce one-entry-per-day via DB constraint; bulk operations endpoints.
-- Observability: error tracking (Sentry), logging, uptime/alerting.
-
----
-
-## 11. Success metrics (proposed)
-
-- Daily submission rate (% of team submitting each working day) ≥ 90%.
-- Median time to submit an update < 60s.
-- Manager time-to-review: same-day review of ≥ 80% of entries.
-- Blocker resolution time (median age at resolve) trending down.
-- Zero plaintext-credential exposure (post-hardening).
-
----
-
-## 12. Open questions (for brainstorming)
-
-1. Will this stay single-team, or must it support multiple teams/managers?
-2. Is SSO (Google/Microsoft) required, and can we drop custom credentials entirely?
-3. What's the required data-retention / compliance posture (it's a life-sciences org)?
-4. Is mobile/offline use a real need for the team?
-5. Should notifications (missing submission, new blocker) be in-app only or Slack/email/Teams?
-6. Is time tracking meant to be precise (billing/utilization) or a rough signal?
-7. What reporting do stakeholders above the manager need, if any?
-
----
-
-## 13. v6 target — decisions (from brainstorming, 2026-07-04)
-
-Scope stays **single-team, single-manager**. No SSO. Internal use in a life-sciences org. **This version's goal: an enterprise-grade tracker that is Zoho-ready but does NOT yet integrate.** Zoho Projects integration is the **next-version milestone** (§16), built once the tracker requirements are fully satisfied.
-
-### Manager's operating philosophy (drives the design)
-- **Output over hours.** Whether a task took 4h or 8h is irrelevant; what matters is that it got done and moved forward. Time is a weak signal — completion and visible progress are the real signals. De-emphasize precise time tracking.
-- **Deadlines are commitments, not suggestions.** The manager dislikes deadlines being moved. The system should keep deadlines stable, make any change explicit and accountable (original vs current, count of changes), and **alert early when a deadline is at risk** rather than quietly extending it.
-- **No idle time.** Every member should be meaningfully utilized. "Utilization" here means *engaged and progressing* (has active work, submitting, moving items forward) — not hours-vs-capacity. Surface idle members: no active work item, submitted with no progress, or fully blocked.
-
-| # | Decision |
-|---|----------|
-| Tenancy | Single team, one manager (unchanged). |
-| Auth | Keep username/password model (no SSO). Still must fix plaintext storage/display + add login rate limiting. |
-| Platform | Mostly desktop; **must work well on phone browsers**. No offline requirement. |
-| Progress verification | Per work item: **required "what changed since yesterday"** + **screenshot attachments** + **file/link attachments**. (No % slider, no manager "no progress" flag for now.) |
-| Commitments loop | Every submission **requires a next-step promise** — **both daily and weekly** (weekly on first submission of the week). Each promise links to a **work item or project**, or is tagged **Other Work** for ad-hoc tasks. Next working day the app **follows up** (Done/Partial/Not done/Carried); missed daily promises **auto-carry with a carry count**. Drives a **Commitment Reliability %** and repeated-carry escalation. |
-| Working week | **Monday–Saturday** (Sunday off). Drives weekend-aware follow-up, weekly promises, and any working-day calculations. |
-| Hours field | **Kept but optional and de-emphasized** (weak signal; output is primary). |
-| Work item ownership | Both manager and employees create; manager can assign to any member(s); **multiple assignees** allowed. |
-| Dependencies | Work items can **depend on** other work items (cross-member handoffs); downstream is **Waiting → Ready** when upstream is Done. |
-| Done handling | Employee's **Done counts immediately; manager can reopen** if unsatisfied. |
-| Data migration | **Keep current employees + projects; wipe only old daily entries/tasks** and start the new model clean. |
-| Submission | **One update per day, editable until end of day, then locked** (replaces the old submit-once/edit-once rule). |
-| Visibility | Employee sees **own work + status of upstream items they depend on** (for handoffs); not the whole team. |
-| Work item status | User-friendly set: **Not started → In progress → Blocked → Done**, with auto **Waiting/Ready** for dependencies. Keep it simple. |
-| Work item deadline | **Optional** per item; rolls up to the project timeline. |
-| Leave / holiday | **Company holiday calendar + employee leave marking**; excluded from reliability & idle metrics. |
-| Commit granularity | **A promise per active work item (daily) + one overall weekly promise.** |
-| Evidence | Screenshots **optional by default**; manager can mark a work item **"evidence required."** |
-| Manager account | Manager can **change own password + reset employee passwords in-app.** |
-| Design | Match the look & feel of **merilacademy.global** (capture exact colors/typography via screenshots at UI time); keep Meril branding. |
-| Audit log | **Yes** — record who changed what and when. |
-| Stack | **Stay on Next.js + Supabase + Vercel.** |
-| Team size | **~10 members** now; small growth expected. |
-| Active projects | **5–6** at a time. |
-| Report audience | **Manager only** (no separate stakeholder group for now). |
-| Email | **Deferred** — build email automation only after the app is fully functional. Use **in-app** signals until then. |
-| Hosting | **Vercel + Supabase free tier.** Design within free limits (esp. Supabase Storage ≈1 GB → compress/limit screenshots; Vercel cron limited → reinforces deferring email). |
-| Timezone | **IST (UTC+5:30)** for all dates, end-of-day lock, and schedules. |
-| Retention | Keep all data **indefinitely**. |
-| Quality bar | **Audit log + automated tests + CI.** |
-| Build order | **Phase 0 → Phase 1**, shipped **incrementally** (test each with the team). |
-| Output vs time | Track task **completion/progress** as the primary signal; hours are secondary/optional. |
-| Deadlines | Keep stable; show **original vs current** and change count; require a reason on change; **at-risk alerts** based on remaining progress vs time. Avoid frictionless "extend." |
-| Utilization | **Engagement/idle model**, not hours-vs-capacity: who has active work, who's progressing, who's idle or blocked. |
-| Email | **Reminder** to employees who haven't submitted; **daily digest to manager** (what each member did today, incl. blockers); **weekly per-member summary to manager**. Manager prefers email over logging in. |
-| Zoho Projects | **Deferred to next version (§16).** Design the data model to be Zoho-ready (stable work-item ids, mappable status), but ship no Zoho code this version. |
-
-### 13.1 Key model change — persistent Work Items
-Today, each daily entry stores free-text tasks with no continuity between days. To support progress verification and Zoho task mapping, introduce a **Work Item** that persists across days:
-- A work item belongs to a project — or is tagged **Other Work** for ad-hoc tasks outside any project — and (optionally) a Zoho task id.
-- **Assignees:** one or more members (single-owner or shared across a project).
-- **Ownership:** both manager and employees can create work items; the manager can assign to any member(s).
-- **Dependencies / handoffs:** a work item can depend on another. The downstream item is **Waiting** until the upstream is **Done**, then flips to **Ready to start** and notifies its assignee. Dependency waiting auto-clears on completion (no manual blocker). Manager sees the chain and where a handoff is stuck.
-- A daily update logs progress *against* a work item: optional hours, status, **what changed since yesterday**, attachments (screenshots/files/links).
-- The manager sees a per-work-item **timeline** of daily progress + screenshots — making real change (or its absence) visible.
-This is the enabling change for §14 Phases 1–3.
-
-### 13.2 Commitments — the promise → follow-up → delivered loop
-Accountability comes from comparing what a member *promised* to what they *delivered*.
-
-**Daily flow becomes 3 steps:**
-1. **Follow up** — app shows yesterday's open promises; employee marks each `done | partial | missed | carried` (+ note + optional screenshot). This is the structured "what changed."
-2. **Log** — any other progress today.
-3. **Commit** — required "what will you accomplish tomorrow?"; on the first submission of the week, also "what this week?". Each promise links to a **work item / project** or is tagged **Other Work**.
-
-**Data model — `commitments`:** id, employee_id, work_item_id (nullable), horizon (`day` | `week`), text, due_date (the working day / week it's checked), created_in_entry_id, status (`open | done | partial | missed | carried`), outcome_note, resolved_in_entry_id, resolved_at, carry_count.
+**Step 3 — Commit.** Required on new submissions: at least one **daily** commitment ("what will you accomplish by the next working day?"), each linked to a project or tagged Other Work. On the **first submission of the week**, a **weekly** commitment (due that week's Saturday) is also required. On Saturday, a new weekly commitment targets *next* week's Saturday.
 
 **Rules & signals:**
-- Working week is **Mon–Sat**; follow-up is weekend/holiday-aware (Saturday's daily promise is followed up Monday).
-- **Commitment Reliability %** = delivered (done) ÷ promised, per employee per period — a headline manager metric.
-- A promise **carried 3+ times** is escalated to the manager as stalled work.
-- Missed promises can optionally link to a blocker.
+- Working week is **Mon–Sat**; follow-up is weekend-aware (`nextWorkingDay` skips Sunday). Saturday's daily promise is followed up Monday.
+- **Auto-carry:** on GET, open commitments past their due date roll forward to today, with `carry_count` incremented by the number of working days missed (so ignoring a promise for 3 days shows "carried ×3").
+- **Commitment Reliability %** = delivered (done) ÷ resolved, per employee per period — a headline manager metric shown to both manager (Commitments tab) and employee (My Stats).
+- A commitment **carried 3+ times** is escalated on the manager's Commitments tab as **stalled work**.
+- **Server enforcement:** POST `/api/commitments` validates required fields, horizon, and scopes `employee_id` to the caller; PATCH enforces ownership and valid action/status; DELETE is manager-only.
 
-### 13.3 v1 (Monday) — first live version scope
-Delivery target: **live by Monday** for the team to start using. Built **on the existing entry/task model** (no risky refactor) so it's functional and safe on live data. Sequence after: **email → Zoho → enterprise-grade**.
+---
 
-**In scope for v1 (must be fully functional):**
-- **Commitments loop** — daily promise ("what will you do tomorrow?") + weekly promise, each linked to a project/task; **next-working-day / next-week follow-up** (Done / Partial / Missed / Carried); auto-carry with count; **Commitment Reliability %**.
-- **"What changed since yesterday"** field on each task.
-- **Screenshots + file/link attachments** per task/update (Supabase Storage; size-limited + compressed to respect free-tier ~1 GB).
-- **Manager views:** per-member **promise-vs-delivered** + Reliability %, and a **daily progress trail with screenshots**; existing Today / Blockers / Projects / History / Settings retained.
-- Keep current **employees + projects**; wipe old daily entries for a clean start.
-- Mobile-friendly; **IST** throughout.
+## 7. Functional requirements — Employee
 
-**Deferred (post-Monday, in order):**
-1. **Email** automation (reminders, daily digest, weekly summary).
-2. **Zoho Projects** integration (§16).
-3. **Enterprise-grade:** formal **Work Items** + cross-member **dependencies/handoffs**, **leave/holiday calendar**, **deadline integrity** + **engagement/idle** analytics, **audit log**, **tests + CI**, **merilacademy.global redesign**, and **security hardening** (password hashing, login rate limiting).
+### 7.1 Daily update (task rows)
+- **FR-E1:** Add N task rows. Each row: project picker (My Projects / Other Projects / Other Work), task title, **optional** hours, status (In progress / Completed / Blocked), optional blocker text, **required "what changed since yesterday,"** and optional attachments.
+- **FR-E2:** Status indicator circle per task: in-progress = navy ring, completed = solid green ✓, blocked = solid red !.
+- **FR-E3:** Attachments per task — **screenshot/image** and **file** upload (client-compressed, ≤2 MB, allowlisted types) and **inline link** entry. Attachments open in a single new tab.
+- **FR-E4:** Overall workload selector (light / medium / heavy).
+- **FR-E5:** Submit validation: ≥1 task with a title; "what changed" filled for every task; due commitments resolved; ≥1 daily commitment; weekly commitment on first update of the week.
 
-**Accepted tradeoff:** v1 stores commitments against the current project/task. When Work Items land later, commitments migrate to reference `work_item_id` — a known, contained migration.
+### 7.2 Edit & lock
+- **FR-E6:** One update per day; **editable until end of the IST day, then locked** (server rejects edits when `entry.date !== todayIST()`).
+- **FR-E7:** Each edit **increments `submit_count`**; the manager sees an "· edited" tag when `submit_count > 1`.
+- **FR-E8:** **Absent-day recovery** — if the manager marked the employee absent, the dashboard shows an amber "Marked absent today" card with an "I worked today — log my update" button. Logging real work clears `is_absent`, so it counts as a submission.
+- **FR-E9:** Editing does **not** re-create commitments (no duplicates).
 
-## 14. Proposed phased roadmap
+### 7.3 Views
+- **FR-E10:** Submitted-state confirmation card; today's tasks; manager notes on entries; open commitments list.
+- **FR-E11:** "My Stats" — Commitment Reliability %, total updates, completion rate, hours logged, commitment outcomes, workload distribution, task outcomes, project breakdown (30-day window).
+- **FR-E12:** Recent history (last 5 non-today entries) with manager notes; absent days shown explicitly.
+- **FR-E13:** Active broadcast banner (dismissible).
 
-### Phase 0 — Foundations & hygiene (low risk)
-- Hash passwords (or migrate to Supabase Auth for employees); stop displaying plaintext in Settings.
-- Rate limiting + lockout on `/api/auth/login`; basic security headers.
-- Repo cleanup: remove legacy root HTML prototypes; single canonical schema.
-- Mobile-responsive pass across employee + manager views.
+---
 
-### Phase 1 — Progress verification + commitments (core differentiator)
-- Introduce **Work Items** (new schema; wipe old free-text task data). Multiple assignees; created by manager or employees; manager can assign.
-- **Dependencies / handoffs:** Waiting → Ready transitions when an upstream item is Done.
-- **Commitments loop:** 3-step daily flow (follow up → log → commit); daily + weekly promises (Mon–Sat week); auto-carry with count; **Commitment Reliability %**; repeated-carry escalation.
-- Per daily update: required "what changed since yesterday", screenshot upload, file/link attachments (Supabase Storage). One update/day, editable until EOD then locked.
-- Manager views: per-work-item **timeline** (side-by-side screenshots), **promise-vs-delivered** per member, and **dependency chain / stuck-handoff** visibility.
+## 8. Functional requirements — Manager
 
-### Phase 2 — Output, deadlines & engagement
-- **Deadline integrity:** store original deadline, surface original-vs-current + change count, require a reason on change, and show **at-risk** status (progress vs time remaining).
-- **Engagement/idle view:** who has active work items, who's progressing, who's idle or blocked — the manager's "is everyone utilized?" answer.
-- **Output-first reporting:** completions and progress as the headline metrics; hours secondary.
+### 8.1 Today
+- **FR-M1:** Stat cards (Submitted, Pending, Heavy, Medium, Light) that act as filters.
+- **FR-M2:** "Yet to Submit" list with per-employee **Absent** and **Submit on behalf** actions (modal).
+- **FR-M3:** Expand an entry to view tasks, what-changed, attachments, blockers; **mark reviewed / unmark**; **add manager note**.
+- **FR-M4:** Delete an entry; entries show an "· edited" tag when revised.
+- **FR-M5:** Manager can log their own daily update.
+- **FR-M6:** Filter by employee name.
+
+### 8.2 Commitments
+- **FR-C1:** Team stat cards — Team Reliability %, Commitments Made, Delivered, Due/Overdue, Stalled (3+ carries).
+- **FR-C2:** Stalled-work escalation list (committed ≥3 times without delivery).
+- **FR-C3:** Per-member reliability, promised/delivered/open counts, expandable commitment history with outcome notes; period selector (7/30/90 days).
+
+### 8.3 Blockers
+- **FR-B1:** List all tasks in the last 30 days that are `blocked` OR have non-empty blocker text.
+- **FR-B2:** Age indicator (Today / Yesterday / Nd ago) with color escalation.
+- **FR-B3:** Resolve/reopen a blocker (persisted by `entryId:taskIndex`).
+- **FR-B4:** Show/hide resolved.
+
+### 8.4 Projects
+- **FR-P1:** Create project (name→slug id, lead, members, start, deadline, color).
+- **FR-P2:** Per-project stats: today count, total submissions, last activity, total hours, per-member contributions.
+- **FR-P3:** Deadline alerts (overdue, due within 7 days).
+- **FR-P4:** Edit deadline (set or extend; keeps `previous_deadlines` history).
+- **FR-P5:** Inline rename; mark complete (archive with end_date); delete.
+- **FR-P6:** Edit team & lead; members who have logged work are locked from removal (🔒).
+- **FR-P7:** Completed projects section with on-time / missed-deadline badges and contribution bars.
+
+### 8.5 History
+- **FR-H1:** Calendar view (default) — workload dots per day, per-date submissions, missing-employee count.
+- **FR-H2:** Weekly dashboard — per-employee week nav, day-by-day hours (Mon–Sat working days), project time, completion rate, CSV.
+- **FR-H3:** People dashboard — per-employee reliability (submitted ÷ **Mon–Sat** working days %), output, workload mix, project table, period selector (week/month/3m/all).
+- **FR-H4:** List view — grouped by date, employee filter, CSV export, per-employee workload stat cards.
+- **FR-H5:** Date range with 7/30/90-day quick presets (list view).
+
+### 8.6 Settings
+- **FR-S1:** Broadcast editor (message + active toggle).
+- **FR-S2:** Team member table (no passwords shown); **reset password** inline; remove member (entries kept).
+- **FR-S3:** Add employee (name, username, password).
+
+---
+
+## 9. Security model (as-built)
+
+- Server-side signed session cookie (`httpOnly`, HMAC-SHA256); role cannot be forged client-side.
+- Central enforcement in `proxy.ts`; manager-only routes/methods gated there and re-checked in handlers for ownership.
+- Employees can only read/write their own entries and commitments (server-scoped by `x-user-id`).
+- Entry and commitment IDs are UUIDs (non-enumerable).
+- Passwords are **never returned** by `/api/employees` GET; the manager resets them (no plaintext display).
+- Attachment uploads are size-limited (≤2 MB) and type-allowlisted; stored under a per-user path.
+- JSONB payload bounds (`project_tasks` ≤ 50; commitments batch ≤ 20).
+- Startup env validation for Supabase creds.
+
+### Known security gaps (tracked for hardening)
+- Employee passwords are stored in **plaintext** in the DB (no longer displayed, but not hashed).
+- No rate limiting on `/api/auth/login` (brute-force exposure).
+- No CSRF token (relies on `sameSite=lax`).
+- RLS disabled — all DB security depends on the proxy + service-role key.
+- `SESSION_SECRET` falls back to the service-role key if unset.
+- No audit log of mutations yet.
+
+---
+
+## 10. Complete change history (first commit → v6)
+
+Chronological. Tags: `v1.0.0`, `v2.0.0`, `v4.0.0`, `v4.1`, `v5`, `v6`.
+
+### Genesis — Next.js + Supabase (2026-06-18)
+- `667c148` **Add Next.js app with Supabase integration** — initial rebuild of the static HTML tracker into a Next.js App Router app backed by Supabase (v1 schema: `employees`, `entries` with free-text `work`/`blockers`).
+- `2e1ba61` Fix manager login to use the correct Supabase email.
+- `39a9793` Add try/catch to all fetch calls to prevent a stuck loading state.
+
+### v2 — task model + projects + Apple/iOS redesign (2026-06-21)
+- `91448f9` **v2 — task-based entries, projects, blockers, Apple/iOS redesign** — replaced free-text work with structured `project_tasks` (jsonb), added `projects`, `comments`, `reviewed_entries`, `resolved_blockers`, `broadcast` tables (`supabase_schema_v2.sql`).
+- `c48f86b` Skip ESLint during Vercel build (strict react-hooks rules blocked deploy).
+- `b220733` Revert: restore `next.config.ts` (eslint option not valid in Next.js 16).
+
+### v4 — design system + manager UI (2026-06-22 → 06-25)
+- `a423dcc` **v4 design — login page, task form, colors.**
+- `1b1445a` **v4 manager UI — EntryRow, TodayTab, Blockers, History, Projects.**
+- `25b7ae3` / `6cb3e19` / `d45a618` / `6927ec2` Manager identity fixes — display name and login username normalized to `Manager`; use hardcoded manager email for Supabase Auth.
+- `32997b6` Show "Mark Reviewed" and "Add Note" on all entries without expanding.
+- `c775df1` Show blockers with non-empty blocker text regardless of task status.
+- `fe90926` Apply all 8 code-review findings + cleanup.
+
+### v4.1 — project management depth (2026-06-25)
+- `6d3cbb9` Delete-project button (active + completed cards).
+- `69fcf5c` Inline project rename.
+- `575dc62` Allow Manager to be a project lead/member.
+- `9027184` Edit deadline and team members on existing projects.
+- `81239cd` Swap Calendar/List positions in History; default to Calendar.
+
+### v5 — security hardening + branding (2026-06-25)
+- `caf60a4` Show manager notes on employees' submitted entries.
+- `d56b82c` Show today's date below "Today's Work" heading.
+- `e38e17f` **v5 — security hardening + code hygiene** (signed session cookie, `proxy.ts` enforcement, scoping).
+- `499c355` **Meril branding** — logo in navbar/login, favicon.
+- `abdf23b` Fix Vercel timeout — `NextResponse.json`, proxy try/catch, session-cookie probe.
+- `77be45c` Remove manager username instructions from LoginPage.
+
+### v6 — commitments, evidence, IST/Mon–Sat, rebrand (2026-07-04 → 07-05)
+- `047d816` **v6.0 — commitments loop, "what changed" field, attachments, IST dates, EOD edit lock, manager Commitments tab.** Added `supabase_schema_v3.sql` (`commitments` table + `attachments` Storage bucket; wipes old daily entries), `lib/dates.ts`, `lib/upload.ts`, `/api/commitments`, `/api/attachments`; extended `ProjectTask` with `what_changed` + `attachments`; replaced submit-once/edit-once with edit-until-EOD.
+- `318d7c3` **Cleanup** — removed the "Carried" task status, the "Clear All Entries" bulk button, and plaintext password display (reset-only; stop returning passwords to the client).
+- `3997f19` **v6 (`v6` tag)** — this release. Meril Academy rebrand (navy/gold, Manrope) across all views; manager display name/login set to **Shorya**; **Mon–Sat** working-week consistency fix in analytics (Saturday counts as a working day); **edit tracking** (`submit_count` increments on edit, "· edited" tag in EntryRow); **absent-day recovery** (editing over an absent day clears `is_absent`); seed/clear test-data scripts.
+
+### Post-v6 terminology & UX notes (applied within the v6 line)
+- "Promise" → **"Commitment"** across the UI.
+- Task card redesign for clarity (prominent title, labeled hours, guided "what changed," blocker field).
+- Action chips (Blocker / Screenshot / Link) restyled as consistent pills; inline link input replaced `window.prompt`.
+- Console-error fixes: split CSS `background`/`border` shorthands into longhand on `<select>`/chip elements; single-tab attachment opening via `window.open` with event guards.
+- `ManagerPage` font switched from the legacy Apple stack to brand Manrope.
+
+---
+
+## 11. Non-functional characteristics (current)
+
+- **Performance:** Client-heavy; each tab fetches via parallel `fetch`es. `EmployeePage` fetches comments per entry (N+1). No caching layer, no pagination. Attachments compressed client-side to respect free-tier Storage.
+- **Scale:** One small team (~10); 5–6 active projects. History views load wide date ranges fully into the client.
+- **Availability:** Vercel + Supabase managed (free tier); no custom SLO.
+- **Accessibility:** Not formally audited; inline styles, limited ARIA.
+- **Observability:** `console.error` only; no metrics/tracing/alerting.
+- **Testing:** No automated tests yet. Production `next build` + `eslint` are the current gates (build passes; lint surfaces advisory React-Compiler rules on the fetch-on-mount idiom, non-blocking).
+- **i18n:** English only; dates `en-IN`, all logic in IST.
+
+---
+
+## 12. Known limitations / tech debt
+
+- Legacy static HTML files still at repo root (`daily_work_tracker.html`, `index-v4.html`).
+- Three schema files (`v1`, `v2`, `v3`), applied cumulatively; v3 is current.
+- One-entry-per-day is convention, not a DB constraint.
+- Styling split between inline styles and global CSS (Tailwind present but largely unused).
+- Manager identity/email hardcoded in the login route.
+- `submit_count` tracked but not surfaced beyond the "· edited" tag.
+- Passwords stored plaintext (not displayed) — hashing pending.
+- `sessionStorage` mirror of the session can drift from the cookie.
+
+---
+
+## 13. Forward roadmap
+
+Deferred, in order: **email automation → Zoho Projects → enterprise hardening.**
 
 ### Phase 3 — Email & stakeholder reporting (manager convenience)
 - Scheduled jobs (Vercel Cron) + email provider (e.g., Resend).
 - Daily reminder to non-submitters; **daily manager digest** (what each member did today + blockers); **weekly per-member summary**.
-- Stakeholder view/report: project timelines vs estimated deadlines, team engagement summary.
+- Build the digest as an assembled in-app object first so email becomes a trivial add.
 
-### 14.1 Research-driven additions (from `docs/competitive-research.md`, 2026-07-04)
-Derived from surveying the async check-in / accountability layer (Geekbot, DailyBot, Standuply, Range, 15Five, Weekdone) and 2026 best-practice research on outcome-based vs surveillance-style tracking. Ranked by value-to-effort; slotted into the phases above.
+### Enterprise-grade hardening
+- **Work Items** — persist a work item across days (project or Other Work, optional Zoho task id), with multiple assignees and cross-member **dependencies/handoffs** (Waiting → Ready when upstream is Done). Commitments migrate to reference `work_item_id`.
+- **Deadline integrity** — store original vs current deadline, change count, required reason on change, and **at-risk** status (progress vs time remaining).
+- **Engagement/idle view** — who has active work, who's progressing, who's blocked/stalled (framed as "unblock people").
+- **Leave/holiday calendar** — company holidays + employee leave, excluded from reliability & idle metrics.
+- **Security** — hash passwords (bcrypt/argon2) or move employees to Supabase Auth; login rate limiting + lockout; CSRF; security headers; enable RLS as defense-in-depth.
+- **Audit log** — record who changed what and when.
+- **Quality** — automated tests (unit/integration/e2e) + CI; typed API layer / shared validation (e.g. Zod).
+- **UX** — mobile-first/PWA pass; accessibility (WCAG); consolidate the design system.
 
-| # | Addition | Source pattern | Phase | Notes |
-|---|----------|----------------|-------|-------|
-| 1 | **Auto blocker detection** on the "what changed since yesterday" field | Geekbot / DailyBot flag blocker language in free text | Phase 1 | Heuristic/keyword pass; feeds the existing Blockers tab without requiring explicit tagging. Low effort. |
-| 2 | **Employee-facing reliability + streak view** — each person sees their own Commitment Reliability % and submission streak | Employee-facing dashboards drive self-correction better than manager-only reporting | Phase 1 (extend §13.2) | Cheapest lever for the ≥90% submission-rate metric (§11). |
-| 3 | **Nudge + deadline mechanic** as a first-class feature (in-app before email) | Standuply: reminders + a deadline are what stop teams missing days | Phase 1→3 | In-app follow-up now; email nudge in Phase 3. |
-| 4 | **Reframe engagement/idle view** around *blocked / waiting-on-handoff / stalled*, not idleness | Outcome-based research: "catch the idler" framing drives attrition; "unblock people" framing improves performance | Phase 2 | Same data (§13, utilization), safer + more effective framing. Design decision, ~no extra cost. |
-| 5 | **Manager daily digest as an assembled in-app object** (team did X today + blockers) | DailyBot auto-compiled daily summary | Phase 2 (render) → Phase 3 (email) | Build the digest object in-app first so email is a trivial add later. |
+### 13.1 Research-driven additions (from `docs/competitive-research.md`)
+Derived from surveying async check-in tools (Geekbot, DailyBot, Standuply, Range, 15Five, Weekdone) and outcome-based tracking research:
+1. **Auto blocker detection** on the "what changed" field (keyword heuristic feeding the Blockers tab).
+2. **Employee-facing reliability + streak view** (self-correction beats manager-only reporting).
+3. **Nudge + deadline mechanic** (in-app first, email later).
+4. **Reframe engagement** around *blocked / waiting / stalled*, not idleness.
+5. **Manager daily digest as an in-app object** first, then email.
 
-**Cross-cutting principle (validates §13):** measure output and framing matters more than the metric. Show reliability to employees, keep hours optional/de-emphasized, and never add activity-surveillance (screen capture, idle timers, keystroke counts) — the research ties those to trust erosion and top-performer attrition.
-
-## 15. Open items to resolve next
-1. **Attachments:** confirm storing screenshots/work files in Supabase Storage is acceptable for internal data; set size/type limits and retention.
-2. **Idle detection thresholds:** what counts as "idle"? (e.g., no active work item, or a submission with no `what-changed`/progress for N days.) Define the rule the engagement view uses.
-3. **At-risk deadline rule:** what triggers an at-risk flag? (e.g., open work items on the project with < X days left and no recent progress.)
-4. **Hours field:** keep the optional hours input (light signal) or drop it entirely, given output-over-time?
-
-## 16. Next version — Zoho Projects integration (out of scope for v6)
-Built after the tracker is proven internally. Planned then:
-- Feasibility spike: Zoho OAuth, API scopes, mapping tracker projects/work items → Zoho projects/tasks.
-- One-way push: status & % progress, daily progress notes as task comments, create/update Zoho tasks.
-- Mapping/config UI + sync status & error handling.
-
-**v6 constraint:** keep the data model Zoho-ready — stable work-item identifiers and a status enum that maps cleanly to Zoho — so this integration is additive, not a rewrite.
+**Cross-cutting principle:** measure output; framing matters more than the metric. Show reliability to employees, keep hours optional, never add activity surveillance (screen capture, idle timers, keystroke counts).
 
 ---
 
-*Prepared from a full read of the codebase (Next.js app in `app/`, Supabase schema, and `proxy.ts`). Reflects deployed state at commit `77be45c` (v5.x) plus v6 target decisions from the 2026-07-04 brainstorming.*
+## 14. Success metrics
+
+- Daily submission rate (% of team submitting each **Mon–Sat** working day) ≥ 90%.
+- Median time to submit an update < 60s.
+- Commitment Reliability % trending up; stalled (3+ carry) count trending down.
+- Manager same-day review of ≥ 80% of entries.
+- Blocker resolution time (median age at resolve) trending down.
+- Zero plaintext-credential exposure to clients (achieved: passwords no longer returned/displayed; hashing still pending).
+
+---
+
+## 15. Open questions
+
+1. **Password hashing** — hash in place, or migrate employees to Supabase Auth entirely?
+2. **Idle detection thresholds** — what counts as "idle" for the engagement view (no active work item, or no progress for N days)?
+3. **At-risk deadline rule** — what triggers the flag (open items with < X days left and no recent progress)?
+4. **Hours field** — keep the optional input as a light signal, or drop it entirely?
+5. **Attachments retention** — size/type limits confirmed; define a retention policy as Storage fills.
+
+---
+
+## 16. Next version — Zoho Projects integration (out of scope for v6)
+
+Built after the tracker is proven internally:
+- Feasibility spike: Zoho OAuth, API scopes, mapping tracker projects/work items → Zoho projects/tasks.
+- One-way push: status & progress, daily progress notes as task comments, create/update Zoho tasks.
+- Mapping/config UI + sync status & error handling.
+
+**Design constraint held in v6:** keep the data model Zoho-ready — stable identifiers and a status enum that maps cleanly to Zoho — so the integration is additive, not a rewrite.
+
+---
+
+*Blueprint prepared from a full read of the codebase (Next.js app in `app/`, Supabase schemas `v1`–`v3`, `proxy.ts`) and the complete git history through commit `3997f19` (`v6`, 2026-07-05).*
