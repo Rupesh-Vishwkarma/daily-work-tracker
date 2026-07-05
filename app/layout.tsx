@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Meril Daily Tracker",
-  description: "Meril Life Sciences – Daily work updates and team progress tracking",
+  title: "Immersive Team",
+  description: "Daily updates and progress insights",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
