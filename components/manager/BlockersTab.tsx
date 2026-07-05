@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { Entry, Project } from '@/lib/types'
 import { FONT, CARD } from '@/lib/ui'
 import { todayIST } from '@/lib/dates'
+import { useNudge } from '@/lib/realtime'
 
 function fmtDate(s: string) {
   return new Date(s + 'T12:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
@@ -33,8 +34,8 @@ export default function BlockersTab() {
   const [showResolved, setShowResolved] = useState(false)
   const [loading, setLoading] = useState(true)
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
     try {
       const from = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
       const to = todayIST()
@@ -47,10 +48,13 @@ export default function BlockersTab() {
       setEntries(all.filter(e => e.project_tasks?.some(t => t.status === 'blocked' || (t.blockers && t.blockers.trim()))))
       setProjects(projs.projects || [])
       setResolvedKeys(new Set(res.resolved_keys || []))
-    } catch (e) { console.error('Failed to load blockers', e) } finally { setLoading(false) }
+    } catch (e) { console.error('Failed to load blockers', e) } finally { if (!silent) setLoading(false) }
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // Live updates: an employee logged/edited work (possibly a new blocker) → silently refresh.
+  useNudge('employee_changed', () => { load(true) })
 
   async function toggleResolved(key: string) {
     if (resolvedKeys.has(key)) {

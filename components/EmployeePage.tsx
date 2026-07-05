@@ -1,9 +1,10 @@
 'use client'
-import { useState, useEffect, useCallback, type MouseEvent as ReactMouseEvent } from 'react'
+import { useState, useEffect, useCallback, useRef, type MouseEvent as ReactMouseEvent } from 'react'
 import { Session, Entry, Project, ProjectTask, TaskStatus, Workload, Comment, Commitment, Attachment } from '@/lib/types'
 import { FONT, CARD, fmtDate as FMT_DATE } from '@/lib/ui'
 import { todayIST, nextWorkingDay, weekSaturday, dayOfWeek } from '@/lib/dates'
 import { uploadAttachment } from '@/lib/upload'
+import { useNudge, sendNudge } from '@/lib/realtime'
 
 const TODAY = todayIST
 
@@ -376,9 +377,11 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
   const [broadcast, setBroadcast] = useState<{ message: string; active: boolean } | null>(null)
   const [broadcastDismissed, setBroadcastDismissed] = useState(false)
   const [commentsMap, setCommentsMap] = useState<Record<string, Comment[]>>({})
+  // A manager change that lands mid-edit is remembered here and applied on exit.
+  const pendingRefresh = useRef(false)
 
-  const fetchData = useCallback(async () => {
-    setLoading(true)
+  const fetchData = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
     try {
       const today = TODAY()
       const from = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
@@ -394,7 +397,7 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
       const historyEnts: Entry[] = hData.entries || []
       setTodayEntry(todayEnt)
       setProjects(pData.projects || [])
-      if (bData.active) setBroadcast(bData)
+      setBroadcast(bData.active ? bData : null)
       setEntries(historyEnts)
       setCommitments(cData.commitments || [])
 
@@ -410,11 +413,28 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
     } catch {
       setError('Failed to load data. Please refresh.')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [session.id])
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  // Live updates: when the manager changes something affecting this employee
+  // (a note, review, broadcast, marked absent…), silently re-fetch. While the
+  // employee is mid-edit we never touch the screen — the change is remembered
+  // and applied the moment they leave edit mode, so nothing is lost or clobbered.
+  useNudge('manager_changed', payload => {
+    if (payload.employeeId && payload.employeeId !== session.id) return
+    if (editMode || submitting) { pendingRefresh.current = true; return }
+    fetchData(true)
+  })
+
+  useEffect(() => {
+    if (!editMode && !submitting && pendingRefresh.current) {
+      pendingRefresh.current = false
+      fetchData(true)
+    }
+  }, [editMode, submitting, fetchData])
 
   function updateTask(i: number, field: keyof LocalTask, value: string | boolean) {
     setTasks(prev => prev.map((t, idx) => idx === i ? { ...t, [field]: value } : t))
@@ -469,6 +489,7 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
     if (!res.ok) { const d = await res.json(); setError(d.error || 'Failed to update commitment.'); return }
     const d = await res.json()
     setCommitments(prev => prev.map(c => c.id === id ? d.commitment : c))
+    sendNudge('employee_changed', { employeeId: session.id, kind: 'commitment' })
   }
 
   const today = TODAY()
@@ -536,7 +557,10 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
       setEditMode(false)
       setPromises([mkPromise()])
       setWeeklyPromise('')
+      pendingRefresh.current = false
       await fetchData()
+      // Nudge the manager's dashboard to refresh with this submission/edit.
+      sendNudge('employee_changed', { employeeId: session.id, kind: 'entry' })
     } catch {
       setError('Connection error. Please try again.')
     } finally {
@@ -561,7 +585,7 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
       {/* NavBar */}
       <nav className="navbar">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <img src="/meril-logo.svg" alt="Meril" style={{ height: 20, width: 'auto', display: 'block' }} />
+          <img src="/meril-logo.svg" alt="Meril" style={{ height: 24, width: 'auto', display: 'block' }} />
           <div style={{ width: 1, height: 16, background: 'rgba(0,0,0,0.12)' }} />
           <span className="navbar-title">Daily Tracker</span>
         </div>

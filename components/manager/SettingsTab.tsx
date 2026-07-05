@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { Employee } from '@/lib/types'
+import { sendNudge } from '@/lib/realtime'
 
 export default function SettingsTab() {
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -28,6 +29,8 @@ export default function SettingsTab() {
     setBroadcastSaving(true)
     try {
       await fetch('/api/broadcast', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(broadcast) })
+      // No employeeId → every logged-in employee refreshes their banner.
+      sendNudge('manager_changed', { kind: 'broadcast' })
       setBroadcastMsg(broadcast.active ? 'Broadcast sent to all employees.' : 'Broadcast deactivated.')
       setTimeout(() => setBroadcastMsg(null), 3000)
     } finally { setBroadcastSaving(false) }

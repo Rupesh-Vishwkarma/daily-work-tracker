@@ -4,6 +4,7 @@ import { Entry, Employee, Project, Comment } from '@/lib/types'
 import { FONT, CARD, fmtDate } from '@/lib/ui'
 import EntryRow from './EntryRow'
 import { todayIST } from '@/lib/dates'
+import { useNudge } from '@/lib/realtime'
 
 const TODAY = todayIST()
 
@@ -528,8 +529,8 @@ export default function HistoryTab() {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
     try {
       const [ents, emps, projs] = await Promise.all([
         fetch(`/api/entries?from=${from}&to=${to}`).then(r => r.json()),
@@ -539,10 +540,13 @@ export default function HistoryTab() {
       setEntries(ents.entries || [])
       setEmployees(emps.employees || [])
       setProjects(projs.projects || [])
-    } finally { setLoading(false) }
+    } finally { if (!silent) setLoading(false) }
   }, [from, to])
 
   useEffect(() => { load() }, [load])
+
+  // Live updates: an employee logged or edited work → silently refresh the history.
+  useNudge('employee_changed', () => { load(true) })
 
   function setRange(days: number) {
     setTo(TODAY)

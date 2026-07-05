@@ -36,7 +36,7 @@ export default function LoginPage({ onLogin }: { onLogin: (s: Session) => void }
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'radial-gradient(1200px 600px at 50% -10%, rgba(51,57,138,0.08), transparent), #f6f7fb', fontFamily: FONT }}>
       <div style={{ width: '100%', maxWidth: 340, padding: '0 20px' }}>
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <img src="/meril-logo.svg" alt="Meril" style={{ height: 32, width: 'auto', display: 'inline-block', marginBottom: 16 }} />
+          <img src="/meril-logo.svg" alt="Meril" style={{ height: 38, width: 'auto', display: 'inline-block', marginBottom: 16 }} />
           <div style={{ width: 36, height: 3, borderRadius: 2, background: '#fdc814', margin: '0 auto 14px' }} />
           <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.4px', marginBottom: 4, color: '#33398a', fontFamily: FONT }}>
             Daily Tracker

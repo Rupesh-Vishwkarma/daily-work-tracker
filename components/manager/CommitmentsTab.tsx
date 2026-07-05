@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { Commitment, Employee, Project } from '@/lib/types'
 import { FONT, CARD, fmtDate } from '@/lib/ui'
 import { todayIST } from '@/lib/dates'
+import { useNudge } from '@/lib/realtime'
 
 const OUTCOME: Record<string, { label: string; color: string }> = {
   open:    { label: 'Open',    color: '#33398a' },
@@ -36,8 +37,8 @@ export default function CommitmentsTab() {
   const [days, setDays] = useState(30)
   const [expanded, setExpanded] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
     try {
       const from = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10)
       const [cRes, eRes, pRes] = await Promise.all([
@@ -48,10 +49,13 @@ export default function CommitmentsTab() {
       setCommitments(cRes.commitments || [])
       setEmployees((eRes.employees || []).filter((e: Employee) => e.role === 'employee'))
       setProjects(pRes.projects || [])
-    } catch { } finally { setLoading(false) }
+    } catch { } finally { if (!silent) setLoading(false) }
   }, [days])
 
   useEffect(() => { load() }, [load])
+
+  // Live updates: an employee logged work or resolved a commitment → silently refresh.
+  useNudge('employee_changed', () => { load(true) })
 
   const today = todayIST()
 

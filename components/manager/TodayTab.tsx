@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { Entry, Employee, Project, ProjectTask, Workload, Session, Comment } from '@/lib/types'
 import { FONT, CARD } from '@/lib/ui'
 import EntryRow from './EntryRow'
+import { useNudge, sendNudge } from '@/lib/realtime'
 
 import { todayIST } from '@/lib/dates'
 
@@ -34,6 +35,7 @@ function SubmitOnBehalfModal({ employee, projects, onClose, onDone }: {
         body: JSON.stringify({ employee_id: employee.id, employee_name: employee.name, date: TODAY(), workload, project_tasks: valid.map(({ uid, ...t }) => t), submitted_by_manager: true })
       })
       if (!res.ok) { const d = await res.json(); setError(d.error || 'Failed'); return }
+      sendNudge('manager_changed', { employeeId: employee.id, kind: 'entry' })
       onDone()
     } catch { setError('Connection error.') } finally { setSubmitting(false) }
   }
@@ -111,8 +113,8 @@ export default function TodayTab({ managerSession }: { managerSession: Session }
   const [submittingMgr, setSubmittingMgr] = useState(false)
   const [submitBehalfEmp, setSubmitBehalfEmp] = useState<Employee | null>(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
     try {
       const [emps, ents, projs, rev] = await Promise.all([
         fetch('/api/employees').then(r => r.json()),
@@ -124,10 +126,13 @@ export default function TodayTab({ managerSession }: { managerSession: Session }
       setEntries(ents.entries || [])
       setProjects(projs.projects || [])
       setReviewedIds(new Set(rev.reviewed_ids || []))
-    } catch { } finally { setLoading(false) }
+    } catch { } finally { if (!silent) setLoading(false) }
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // Live updates: an employee submitted or edited an update → silently refresh.
+  useNudge('employee_changed', () => { load(true) })
 
   async function onExpand(entryId: string) {
     if (comments[entryId] !== undefined) return
@@ -138,11 +143,16 @@ export default function TodayTab({ managerSession }: { managerSession: Session }
     } catch { setComments(prev => ({ ...prev, [entryId]: [] })) }
   }
 
+  function employeeIdForEntry(entryId: string): string | undefined {
+    return entries.find(e => e.id === entryId)?.employee_id
+  }
+
   async function handleAddComment(entryId: string, text: string) {
     await fetch('/api/comments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entry_id: entryId, text, author: 'manager' }) })
     const res = await fetch(`/api/comments?entry_id=${entryId}`)
     const d = await res.json()
     setComments(prev => ({ ...prev, [entryId]: d.comments || [] }))
+    sendNudge('manager_changed', { employeeId: employeeIdForEntry(entryId), kind: 'note' })
   }
 
   async function toggleReviewed(entryId: string) {
@@ -153,6 +163,7 @@ export default function TodayTab({ managerSession }: { managerSession: Session }
       await fetch('/api/reviewed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entry_id: entryId }) })
       setReviewedIds(prev => new Set([...prev, entryId]))
     }
+    sendNudge('manager_changed', { employeeId: employeeIdForEntry(entryId), kind: 'review' })
   }
 
   async function markAbsent(emp: Employee) {
@@ -161,12 +172,15 @@ export default function TodayTab({ managerSession }: { managerSession: Session }
       body: JSON.stringify({ employee_id: emp.id, employee_name: emp.name, date: TODAY(), workload: 'light', is_absent: true, project_tasks: [], submitted_by_manager: true })
     })
     if (!res.ok) { const d = await res.json(); alert(d.error || 'Failed to mark absent.'); return }
+    sendNudge('manager_changed', { employeeId: emp.id, kind: 'absent' })
     load()
   }
 
   async function deleteEntry(id: string) {
     if (!confirm('Delete this entry?')) return
+    const empId = employeeIdForEntry(id)
     await fetch(`/api/entries?id=${id}`, { method: 'DELETE' })
+    sendNudge('manager_changed', { employeeId: empId, kind: 'delete' })
     load()
   }
 

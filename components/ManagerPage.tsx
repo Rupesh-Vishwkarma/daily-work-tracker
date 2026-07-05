@@ -29,7 +29,7 @@ export default function ManagerPage({ session, onLogout }: { session: Session; o
       <nav style={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(0,0,0,0.08)', position: 'sticky', top: 0, zIndex: 100 }}>
         <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 16px', height: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <img src="/meril-logo.svg" alt="Meril" style={{ height: 22, width: 'auto', display: 'block' }} />
+            <img src="/meril-logo.svg" alt="Meril" style={{ height: 24, width: 'auto', display: 'block' }} />
             <div style={{ width: 1, height: 18, background: 'rgba(0,0,0,0.12)' }} />
             <span style={{ fontSize: 13, fontWeight: 600, color: '#1D1D1F', fontFamily: FONT, letterSpacing: '-0.01em' }}>Daily Tracker</span>
             <span style={{ fontSize: 10, fontWeight: 700, background: 'rgba(75,62,157,0.12)', color: '#4b3e9d', padding: '2px 8px', borderRadius: 980, letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: FONT }}>MANAGER</span>
