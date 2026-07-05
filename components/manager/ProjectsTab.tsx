@@ -156,7 +156,7 @@ export default function ProjectsTab() {
 
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
-      <div style={{ width: 28, height: 28, border: '3px solid #F2F2F7', borderTopColor: '#0071E3', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+      <div style={{ width: 28, height: 28, border: '3px solid #F2F2F7', borderTopColor: '#33398a', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
     </div>
   )
 
@@ -174,7 +174,7 @@ export default function ProjectsTab() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 10 }}>
         <div style={{ fontWeight: 700, fontSize: 22, color: '#1D1D1F', fontFamily: FONT, letterSpacing: '-0.02em' }}>Projects</div>
         <button onClick={() => setShowAdd(v => !v)}
-          style={{ padding: '8px 18px', background: '#0071E3', color: 'white', border: 'none', borderRadius: 980, fontSize: 13, cursor: 'pointer', fontWeight: 590, fontFamily: FONT }}>
+          style={{ padding: '8px 18px', background: '#33398a', color: 'white', border: 'none', borderRadius: 980, fontSize: 13, cursor: 'pointer', fontWeight: 590, fontFamily: FONT }}>
           {showAdd ? 'Cancel' : '+ New Project'}
         </button>
       </div>
@@ -225,7 +225,7 @@ export default function ProjectsTab() {
                 const isMem = isLead || newProj.members.includes(emp.id)
                 return (
                   <button key={emp.id} onClick={() => { if (!isLead) toggleMember(emp.id) }}
-                    style={{ padding: '5px 12px', borderRadius: 9999, fontSize: 13, fontWeight: isMem ? 590 : 400, background: isMem ? (isLead ? newProj.color + '22' : 'rgba(0,113,227,0.10)') : '#F2F2F7', color: isMem ? (isLead ? newProj.color : '#0071E3') : '#6E6E73', border: `1.5px solid ${isMem ? (isLead ? newProj.color : 'rgba(0,113,227,0.4)') : 'transparent'}`, cursor: isLead ? 'default' : 'pointer', fontFamily: FONT, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    style={{ padding: '5px 12px', borderRadius: 9999, fontSize: 13, fontWeight: isMem ? 590 : 400, background: isMem ? (isLead ? newProj.color + '22' : 'rgba(51,57,138,0.10)') : '#F2F2F7', color: isMem ? (isLead ? newProj.color : '#33398a') : '#6E6E73', border: `1.5px solid ${isMem ? (isLead ? newProj.color : 'rgba(51,57,138,0.4)') : 'transparent'}`, cursor: isLead ? 'default' : 'pointer', fontFamily: FONT, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                     {emp.name.split(' ')[0]}{isLead && <span style={{ fontSize: 10, fontWeight: 700, marginLeft: 2, opacity: 0.65 }}>Lead</span>}
                   </button>
                 )
@@ -234,11 +234,11 @@ export default function ProjectsTab() {
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={addProject} disabled={saving}
-              style={{ padding: '8px 18px', background: '#0071E3', color: 'white', border: 'none', borderRadius: 980, fontSize: 13, fontWeight: 590, cursor: 'pointer', fontFamily: FONT }}>
+              style={{ padding: '8px 18px', background: '#33398a', color: 'white', border: 'none', borderRadius: 980, fontSize: 13, fontWeight: 590, cursor: 'pointer', fontFamily: FONT }}>
               {saving ? 'Creating…' : 'Create Project'}
             </button>
             <button onClick={() => setShowAdd(false)}
-              style={{ padding: '8px 18px', background: 'none', border: '1.5px solid rgba(0,113,227,0.3)', color: '#0071E3', borderRadius: 980, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
+              style={{ padding: '8px 18px', background: 'none', border: '1.5px solid rgba(51,57,138,0.3)', color: '#33398a', borderRadius: 980, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
               Cancel
             </button>
           </div>
@@ -269,7 +269,7 @@ export default function ProjectsTab() {
                       onChange={e => setEditNameVal(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter') { e.stopPropagation(); renameProject(p.id) } if (e.key === 'Escape') setEditingName(null) }}
                       onClick={e => e.stopPropagation()}
-                      style={{ flex: 1, fontWeight: 700, fontSize: 14, fontFamily: FONT, color: '#1D1D1F', border: 'none', borderBottom: '1.5px solid #0071E3', outline: 'none', background: 'transparent', padding: '0 0 1px' }}
+                      style={{ flex: 1, fontWeight: 700, fontSize: 14, fontFamily: FONT, color: '#1D1D1F', border: 'none', borderBottom: '1.5px solid #33398a', outline: 'none', background: 'transparent', padding: '0 0 1px' }}
                     />
                   : <span style={{ fontWeight: 700, fontSize: 14, fontFamily: FONT, color: '#1D1D1F' }}>{p.name}</span>
                 }
@@ -277,7 +277,7 @@ export default function ProjectsTab() {
                   {editingName === p.id
                     ? <>
                         <button onClick={e => { e.stopPropagation(); renameProject(p.id) }}
-                          style={{ padding: '2px 8px', background: '#0071E3', color: 'white', border: 'none', borderRadius: 980, fontSize: 11, cursor: 'pointer', fontFamily: FONT }}>
+                          style={{ padding: '2px 8px', background: '#33398a', color: 'white', border: 'none', borderRadius: 980, fontSize: 11, cursor: 'pointer', fontFamily: FONT }}>
                           Save
                         </button>
                         <button onClick={e => { e.stopPropagation(); setEditingName(null) }}
@@ -345,9 +345,9 @@ export default function ProjectsTab() {
               {extendPid === selProj.id
                 ? <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                     <input type="date" value={extendDate} onChange={e => setExtendDate(e.target.value)}
-                      style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(0,113,227,0.3)', background: 'white', fontSize: 13, fontFamily: FONT, outline: 'none' }} />
+                      style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(51,57,138,0.3)', background: 'white', fontSize: 13, fontFamily: FONT, outline: 'none' }} />
                     <button onClick={() => extendDeadline(selProj.id)}
-                      style={{ padding: '6px 12px', background: '#0071E3', color: 'white', border: 'none', borderRadius: 980, fontSize: 12, cursor: 'pointer', fontFamily: FONT, fontWeight: 590 }}>
+                      style={{ padding: '6px 12px', background: '#33398a', color: 'white', border: 'none', borderRadius: 980, fontSize: 12, cursor: 'pointer', fontFamily: FONT, fontWeight: 590 }}>
                       Save
                     </button>
                     <button onClick={() => setExtendPid(null)}
@@ -382,12 +382,12 @@ export default function ProjectsTab() {
               <div style={{ fontSize: 11, fontWeight: 700, color: '#AEAEB2', textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: FONT }}>Team</div>
               {editingMembers !== selProj.id
                 ? <button onClick={() => { setEditingMembers(selProj.id); setEditMembers([...(selProj.members || [])]); setEditLead(selProj.lead || '') }}
-                    style={{ fontSize: 12, color: '#0071E3', background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT, padding: 0 }}>
+                    style={{ fontSize: 12, color: '#33398a', background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT, padding: 0 }}>
                     Edit Team
                   </button>
                 : <div style={{ display: 'flex', gap: 6 }}>
                     <button onClick={() => saveTeam(selProj.id)}
-                      style={{ padding: '4px 12px', background: '#0071E3', color: 'white', border: 'none', borderRadius: 980, fontSize: 12, cursor: 'pointer', fontFamily: FONT, fontWeight: 590 }}>
+                      style={{ padding: '4px 12px', background: '#33398a', color: 'white', border: 'none', borderRadius: 980, fontSize: 12, cursor: 'pointer', fontFamily: FONT, fontWeight: 590 }}>
                       Save
                     </button>
                     <button onClick={() => setEditingMembers(null)}
@@ -438,7 +438,7 @@ export default function ProjectsTab() {
                                 )
                               }}
                               title={hasContrib ? 'Has contributed — cannot be removed' : isLead ? 'Project lead — change lead first' : undefined}
-                              style={{ padding: '4px 12px', borderRadius: 980, fontSize: 12, fontFamily: FONT, border: `1.5px solid ${isMem ? (hasContrib ? '#AEAEB2' : 'rgba(0,113,227,0.4)') : 'transparent'}`, background: isMem ? (hasContrib ? '#F2F2F7' : 'rgba(0,113,227,0.08)') : '#F5F5F7', color: isMem ? (hasContrib ? '#6E6E73' : '#0071E3') : '#AEAEB2', cursor: hasContrib || isLead ? 'default' : 'pointer', fontWeight: isMem ? 500 : 400, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                              style={{ padding: '4px 12px', borderRadius: 980, fontSize: 12, fontFamily: FONT, border: `1.5px solid ${isMem ? (hasContrib ? '#AEAEB2' : 'rgba(51,57,138,0.4)') : 'transparent'}`, background: isMem ? (hasContrib ? '#F2F2F7' : 'rgba(51,57,138,0.08)') : '#F5F5F7', color: isMem ? (hasContrib ? '#6E6E73' : '#33398a') : '#AEAEB2', cursor: hasContrib || isLead ? 'default' : 'pointer', fontWeight: isMem ? 500 : 400, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                               {person.name}
                               {hasContrib && <span style={{ fontSize: 10, opacity: 0.6 }}>🔒</span>}
                             </button>
@@ -518,7 +518,7 @@ export default function ProjectsTab() {
                         ? <input autoFocus value={editNameVal} onChange={e => setEditNameVal(e.target.value)}
                             onKeyDown={e => { if (e.key === 'Enter') { e.stopPropagation(); renameProject(p.id) } if (e.key === 'Escape') setEditingName(null) }}
                             onClick={e => e.stopPropagation()}
-                            style={{ fontWeight: 700, fontSize: 14, fontFamily: FONT, border: 'none', borderBottom: '1.5px solid #0071E3', outline: 'none', background: 'transparent', padding: '0 0 1px', minWidth: 120 }} />
+                            style={{ fontWeight: 700, fontSize: 14, fontFamily: FONT, border: 'none', borderBottom: '1.5px solid #33398a', outline: 'none', background: 'transparent', padding: '0 0 1px', minWidth: 120 }} />
                         : <span style={{ fontWeight: 700, fontSize: 14, fontFamily: FONT }}>{p.name}</span>
                       }
                       {overdue && <span style={{ padding: '1px 7px', borderRadius: 980, fontSize: 10, fontWeight: 700, background: 'rgba(255,59,48,0.1)', color: '#FF3B30', fontFamily: FONT }}>Missed Deadline</span>}
@@ -533,7 +533,7 @@ export default function ProjectsTab() {
                     {editingName === p.id
                       ? <>
                           <button onClick={e => { e.stopPropagation(); renameProject(p.id) }}
-                            style={{ padding: '2px 8px', background: '#0071E3', color: 'white', border: 'none', borderRadius: 980, fontSize: 11, cursor: 'pointer', fontFamily: FONT }}>
+                            style={{ padding: '2px 8px', background: '#33398a', color: 'white', border: 'none', borderRadius: 980, fontSize: 11, cursor: 'pointer', fontFamily: FONT }}>
                             Save
                           </button>
                           <button onClick={e => { e.stopPropagation(); setEditingName(null) }}

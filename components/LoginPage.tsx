@@ -33,14 +33,15 @@ export default function LoginPage({ onLogin }: { onLogin: (s: Session) => void }
   }
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#F5F5F7', fontFamily: FONT }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'radial-gradient(1200px 600px at 50% -10%, rgba(51,57,138,0.08), transparent), #f6f7fb', fontFamily: FONT }}>
       <div style={{ width: '100%', maxWidth: 340, padding: '0 20px' }}>
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
           <img src="/meril-logo.svg" alt="Meril" style={{ height: 32, width: 'auto', display: 'inline-block', marginBottom: 16 }} />
-          <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.4px', marginBottom: 4, color: '#1D1D1F', fontFamily: FONT }}>
+          <div style={{ width: 36, height: 3, borderRadius: 2, background: '#fdc814', margin: '0 auto 14px' }} />
+          <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.4px', marginBottom: 4, color: '#33398a', fontFamily: FONT }}>
             Daily Tracker
           </h1>
-          <p style={{ fontSize: 14, color: '#6E6E73', fontFamily: FONT }}>
+          <p style={{ fontSize: 14, color: '#5b6070', fontFamily: FONT }}>
             Sign in to submit your daily update
           </p>
         </div>
@@ -72,7 +73,7 @@ export default function LoginPage({ onLogin }: { onLogin: (s: Session) => void }
             />
             <button
               onClick={() => setShowPw(v => !v)}
-              style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#0071E3', fontFamily: FONT, fontSize: 13, fontWeight: 500, padding: '4px 6px' }}
+              style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#33398a', fontFamily: FONT, fontSize: 13, fontWeight: 500, padding: '4px 6px' }}
             >
               {showPw ? 'Hide' : 'Show'}
             </button>
@@ -83,7 +84,7 @@ export default function LoginPage({ onLogin }: { onLogin: (s: Session) => void }
           <button
             onClick={handleLogin}
             disabled={loading}
-            style={{ width: '100%', padding: '13px 22px', background: '#0071E3', color: 'white', border: 'none', borderRadius: 980, fontSize: 17, fontWeight: 590, fontFamily: FONT, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.6 : 1, letterSpacing: '-0.01em', transition: 'opacity .12s' }}
+            style={{ width: '100%', padding: '13px 22px', background: '#33398a', color: 'white', border: 'none', borderRadius: 12, fontSize: 17, fontWeight: 700, fontFamily: FONT, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.6 : 1, letterSpacing: '-0.01em', transition: 'opacity .12s', boxShadow: '0 4px 14px rgba(51,57,138,0.28)' }}
           >
             {loading ? 'Signing in…' : 'Sign in'}
           </button>

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase, supabaseAdmin } from '@/lib/supabase'
 import { signSession, COOKIE_NAME, SESSION_MAX_AGE, SessionPayload } from '@/lib/auth'
 
-const MANAGER_USERNAME = 'Manager'
+const MANAGER_USERNAME = 'Shorya'
 const MANAGER_EMAIL = 'ai.merillife@gmail.com'
 
 export async function POST(req: NextRequest) {
@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     // Manager: authenticate against the fixed manager account in Supabase Auth.
     const { error } = await supabase.auth.signInWithPassword({ email: MANAGER_EMAIL, password })
     if (error) return NextResponse.json({ error: 'Invalid manager credentials' }, { status: 401 })
-    session = { id: 'manager', username: MANAGER_USERNAME, name: 'Manager', role: 'manager' }
+    session = { id: 'manager', username: MANAGER_USERNAME, name: 'Shorya', role: 'manager' }
   } else {
     // Employee: check the employees table.
     const admin = supabaseAdmin()

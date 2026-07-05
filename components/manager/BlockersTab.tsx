@@ -74,7 +74,7 @@ export default function BlockersTab() {
 
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
-      <div style={{ width: 28, height: 28, border: '3px solid #F2F2F7', borderTopColor: '#0071E3', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+      <div style={{ width: 28, height: 28, border: '3px solid #F2F2F7', borderTopColor: '#33398a', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
     </div>
   )
 
@@ -86,7 +86,7 @@ export default function BlockersTab() {
           <div style={{ fontSize: 13, color: '#6E6E73', marginTop: 2, fontFamily: FONT }}>Last 30 days · {active.length} active</div>
         </div>
         <button onClick={() => setShowResolved(v => !v)}
-          style={{ padding: '7px 14px', background: showResolved ? '#F5F5F7' : 'none', border: '1.5px solid rgba(0,113,227,0.3)', borderRadius: 980, fontSize: 13, cursor: 'pointer', color: '#0071E3', fontFamily: FONT }}>
+          style={{ padding: '7px 14px', background: showResolved ? '#F5F5F7' : 'none', border: '1.5px solid rgba(51,57,138,0.3)', borderRadius: 980, fontSize: 13, cursor: 'pointer', color: '#33398a', fontFamily: FONT }}>
           {showResolved ? 'Hide Resolved' : `Show Resolved (${resolved.length})`}
         </button>
       </div>
@@ -122,7 +122,7 @@ export default function BlockersTab() {
                   </div>
                 </div>
                 <button onClick={() => toggleResolved(key)}
-                  style={{ padding: '6px 14px', borderRadius: 980, fontSize: 12, fontWeight: 590, cursor: 'pointer', fontFamily: FONT, flexShrink: 0, border: 'none', background: isResolved ? '#F5F5F7' : '#0071E3', color: isResolved ? '#6E6E73' : 'white' }}>
+                  style={{ padding: '6px 14px', borderRadius: 980, fontSize: 12, fontWeight: 590, cursor: 'pointer', fontFamily: FONT, flexShrink: 0, border: 'none', background: isResolved ? '#F5F5F7' : '#33398a', color: isResolved ? '#6E6E73' : 'white' }}>
                   {isResolved ? '↩ Reopen' : '✓ Resolve'}
                 </button>
               </div>

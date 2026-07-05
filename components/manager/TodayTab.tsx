@@ -72,7 +72,7 @@ function SubmitOnBehalfModal({ employee, projects, onClose, onDone }: {
             </div>
           ))}
           <button onClick={() => setTasks(prev => [...prev, { uid: Date.now(), project_id: '', task: '', time: '', status: 'in_progress', blockers: '' }])}
-            style={{ fontSize: 12, color: '#0071E3', background: 'none', border: '1px dashed rgba(0,113,227,0.35)', borderRadius: 7, cursor: 'pointer', padding: '5px 10px', fontFamily: FONT, marginBottom: 14 }}>
+            style={{ fontSize: 12, color: '#33398a', background: 'none', border: '1px dashed rgba(51,57,138,0.35)', borderRadius: 7, cursor: 'pointer', padding: '5px 10px', fontFamily: FONT, marginBottom: 14 }}>
             + Add Task
           </button>
           <div style={{ marginBottom: 16 }}>
@@ -87,7 +87,7 @@ function SubmitOnBehalfModal({ employee, projects, onClose, onDone }: {
             </div>
           </div>
           <button onClick={handleSubmit} disabled={submitting}
-            style={{ width: '100%', padding: '12px', background: '#0071E3', color: 'white', border: 'none', borderRadius: 980, fontSize: 15, fontWeight: 590, cursor: 'pointer', fontFamily: FONT }}>
+            style={{ width: '100%', padding: '12px', background: '#33398a', color: 'white', border: 'none', borderRadius: 980, fontSize: 15, fontWeight: 590, cursor: 'pointer', fontFamily: FONT }}>
             {submitting ? 'Submitting…' : 'Submit on Behalf'}
           </button>
         </div>
@@ -214,7 +214,7 @@ export default function TodayTab({ managerSession }: { managerSession: Session }
 
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
-      <div style={{ width: 28, height: 28, border: '3px solid #F2F2F7', borderTopColor: '#0071E3', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+      <div style={{ width: 28, height: 28, border: '3px solid #F2F2F7', borderTopColor: '#33398a', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
     </div>
   )
 
@@ -240,7 +240,7 @@ export default function TodayTab({ managerSession }: { managerSession: Session }
         </select>
         {activeFilter && (
           <button onClick={() => { setStatFilter(''); setNameFilter('') }}
-            style={{ fontSize: 13, color: '#0071E3', background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap', padding: '4px 0' }}>
+            style={{ fontSize: 13, color: '#33398a', background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap', padding: '4px 0' }}>
             Clear filters ×
           </button>
         )}
@@ -251,7 +251,7 @@ export default function TodayTab({ managerSession }: { managerSession: Session }
         <div style={{ ...CARD, padding: '11px 18px', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 13, color: '#6E6E73', fontFamily: FONT }}>You haven&apos;t logged your own update today.</span>
           <button onClick={() => setShowMgrUpdate(v => !v)}
-            style={{ fontSize: 13, color: '#0071E3', background: 'none', border: '1px solid rgba(0,113,227,0.25)', borderRadius: 8, cursor: 'pointer', padding: '5px 12px', fontFamily: FONT, fontWeight: 500 }}>
+            style={{ fontSize: 13, color: '#33398a', background: 'none', border: '1px solid rgba(51,57,138,0.25)', borderRadius: 8, cursor: 'pointer', padding: '5px 12px', fontFamily: FONT, fontWeight: 500 }}>
             {showMgrUpdate ? 'Cancel' : 'Add my update'}
           </button>
         </div>
@@ -291,7 +291,7 @@ export default function TodayTab({ managerSession }: { managerSession: Session }
           ))}
           <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center', flexWrap: 'wrap' }}>
             <button onClick={() => setMgrTasks(prev => [...prev, emptyMgrTask()])}
-              style={{ fontSize: 12, color: '#0071E3', background: 'none', border: '1px dashed rgba(0,113,227,0.35)', borderRadius: 7, cursor: 'pointer', padding: '5px 10px', fontFamily: FONT }}>
+              style={{ fontSize: 12, color: '#33398a', background: 'none', border: '1px dashed rgba(51,57,138,0.35)', borderRadius: 7, cursor: 'pointer', padding: '5px 10px', fontFamily: FONT }}>
               + project
             </button>
             <select value={mgrWl} onChange={e => setMgrWl(e.target.value as Workload)}
@@ -301,7 +301,7 @@ export default function TodayTab({ managerSession }: { managerSession: Session }
               <option value="heavy">Heavy</option>
             </select>
             <button onClick={submitMgrUpdate} disabled={submittingMgr}
-              style={{ padding: '7px 16px', background: '#0071E3', color: 'white', border: 'none', borderRadius: 980, fontSize: 13, fontWeight: 590, cursor: 'pointer', fontFamily: FONT }}>
+              style={{ padding: '7px 16px', background: '#33398a', color: 'white', border: 'none', borderRadius: 980, fontSize: 13, fontWeight: 590, cursor: 'pointer', fontFamily: FONT }}>
               {submittingMgr ? 'Submitting…' : 'Submit'}
             </button>
           </div>
@@ -321,7 +321,7 @@ export default function TodayTab({ managerSession }: { managerSession: Session }
                   Absent
                 </button>
                 <button onClick={() => setSubmitBehalfEmp(e)}
-                  style={{ padding: '3px 8px', background: 'rgba(0,113,227,0.08)', border: 'none', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: '#0071E3', fontFamily: FONT }}>
+                  style={{ padding: '3px 8px', background: 'rgba(51,57,138,0.08)', border: 'none', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: '#33398a', fontFamily: FONT }}>
                   Submit
                 </button>
               </div>

@@ -5,7 +5,7 @@ import { FONT, CARD, fmtDate } from '@/lib/ui'
 import { todayIST } from '@/lib/dates'
 
 const OUTCOME: Record<string, { label: string; color: string }> = {
-  open:    { label: 'Open',    color: '#0071E3' },
+  open:    { label: 'Open',    color: '#33398a' },
   done:    { label: 'Done',    color: '#34C759' },
   partial: { label: 'Partial', color: '#FF9500' },
   missed:  { label: 'Missed',  color: '#FF3B30' },
@@ -80,7 +80,7 @@ export default function CommitmentsTab() {
 
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
-      <div style={{ width: 28, height: 28, border: '3px solid #F2F2F7', borderTopColor: '#0071E3', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+      <div style={{ width: 28, height: 28, border: '3px solid #F2F2F7', borderTopColor: '#33398a', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
     </div>
   )
 
@@ -91,7 +91,7 @@ export default function CommitmentsTab() {
         <span style={{ fontSize: 13, color: '#6E6E73', fontFamily: FONT, marginRight: 4 }}>Period:</span>
         {PERIODS.map(p => (
           <button key={p.id} onClick={() => setDays(p.id)}
-            style={{ padding: '5px 14px', borderRadius: 980, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, border: 'none', background: days === p.id ? '#0071E3' : '#F2F2F7', color: days === p.id ? 'white' : '#6E6E73' }}>
+            style={{ padding: '5px 14px', borderRadius: 980, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, border: 'none', background: days === p.id ? '#33398a' : '#F2F2F7', color: days === p.id ? 'white' : '#6E6E73' }}>
             {p.label}
           </button>
         ))}
@@ -100,8 +100,8 @@ export default function CommitmentsTab() {
       {/* Team stat cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 10, marginBottom: 16 }}>
         {[
-          { v: teamReliability !== null ? teamReliability + '%' : '—', l: 'Team Reliability', c: '#5856D6' },
-          { v: commitments.length, l: 'Commitments Made', c: '#0071E3' },
+          { v: teamReliability !== null ? teamReliability + '%' : '—', l: 'Team Reliability', c: '#4b3e9d' },
+          { v: commitments.length, l: 'Commitments Made', c: '#33398a' },
           { v: resolvedAll.filter(c => c.status === 'done').length, l: 'Delivered', c: '#34C759' },
           { v: openOverdue, l: 'Due / Overdue', c: '#FF9500' },
           { v: allStalled.length, l: 'Stalled (3+ carries)', c: '#FF3B30' },
@@ -173,7 +173,7 @@ export default function CommitmentsTab() {
                     <div key={c.id} style={{ background: '#F5F5F7', borderRadius: 10, padding: '10px 12px', marginBottom: 8 }}>
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 4, flexWrap: 'wrap' }}>
                         <span style={{ padding: '2px 8px', borderRadius: 980, fontSize: 11, fontWeight: 700, background: o.color + '15', color: o.color, fontFamily: FONT }}>{o.label}</span>
-                        <span style={{ padding: '2px 8px', borderRadius: 980, fontSize: 10, fontWeight: 700, background: c.horizon === 'week' ? 'rgba(88,86,214,0.12)' : 'rgba(0,0,0,0.05)', color: c.horizon === 'week' ? '#5856D6' : '#6E6E73', fontFamily: FONT }}>
+                        <span style={{ padding: '2px 8px', borderRadius: 980, fontSize: 10, fontWeight: 700, background: c.horizon === 'week' ? 'rgba(75,62,157,0.12)' : 'rgba(0,0,0,0.05)', color: c.horizon === 'week' ? '#4b3e9d' : '#6E6E73', fontFamily: FONT }}>
                           {c.horizon === 'week' ? 'WEEK' : 'DAY'}
                         </span>
                         {proj && (

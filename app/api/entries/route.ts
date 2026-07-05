@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   const body = await req.json()
-  const { id, project_tasks, workload, submit_count } = body
+  const { id, project_tasks, workload, submit_count, is_absent } = body
   if (!id) return NextResponse.json({ error: 'Missing entry id' }, { status: 400 })
   if (project_tasks !== undefined && (!Array.isArray(project_tasks) || project_tasks.length > 50)) {
     return NextResponse.json({ error: 'Invalid project_tasks' }, { status: 400 })
@@ -113,6 +113,7 @@ export async function PATCH(req: NextRequest) {
   if (project_tasks !== undefined) updates.project_tasks = project_tasks
   if (workload !== undefined) updates.workload = workload
   if (submit_count !== undefined) updates.submit_count = submit_count
+  if (is_absent !== undefined) updates.is_absent = is_absent
 
   const { data, error } = await admin.from('entries').update(updates).eq('id', id).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

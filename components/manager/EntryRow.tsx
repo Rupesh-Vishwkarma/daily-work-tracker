@@ -10,7 +10,7 @@ const WL = {
 } as const
 
 const TS = {
-  in_progress: { color: '#0071E3', label: 'In Progress' },
+  in_progress: { color: '#33398a', label: 'In Progress' },
   completed: { color: '#34C759', label: 'Done' },
   blocked: { color: '#FF3B30', label: 'Blocked' },
 } as const
@@ -63,7 +63,7 @@ export default function EntryRow({
         </div>
       )}
       {entry.submitted_by_manager && !entry.is_absent && (
-        <div style={{ background: 'rgba(0,113,227,0.06)', borderBottom: '1px solid rgba(0,113,227,0.12)', padding: '5px 20px', fontSize: 12, color: '#0062C4', fontWeight: 500, fontFamily: FONT }}>
+        <div style={{ background: 'rgba(51,57,138,0.06)', borderBottom: '1px solid rgba(51,57,138,0.12)', padding: '5px 20px', fontSize: 12, color: '#282d6e', fontWeight: 500, fontFamily: FONT }}>
           Submitted by manager on behalf
         </div>
       )}
@@ -95,6 +95,9 @@ export default function EntryRow({
                 </span>
                 {entry.project_tasks?.some(t => t.status === 'blocked') && (
                   <span style={{ fontSize: 11, color: '#FF3B30', fontWeight: 600, fontFamily: FONT }}>⚠ blocker</span>
+                )}
+                {(entry.submit_count || 1) > 1 && (
+                  <span style={{ fontSize: 11, color: '#8E8E93', fontWeight: 500, fontFamily: FONT }} title={`Edited ${entry.submit_count} times`}>· edited</span>
                 )}
               </>
             )}
@@ -133,8 +136,8 @@ export default function EntryRow({
                 </div>
                 <div style={{ fontSize: 13, color: '#1D1D1F', lineHeight: 1.5, fontFamily: FONT }}>{task.task}</div>
                 {task.what_changed && (
-                  <div style={{ fontSize: 12, color: '#3C3C43', marginTop: 6, padding: '6px 10px', background: 'rgba(0,113,227,0.05)', borderRadius: 6, borderLeft: '2px solid rgba(0,113,227,0.35)', fontFamily: FONT, lineHeight: 1.5 }}>
-                    <span style={{ fontWeight: 700, color: '#0071E3', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>What changed · </span>{task.what_changed}
+                  <div style={{ fontSize: 12, color: '#3C3C43', marginTop: 6, padding: '6px 10px', background: 'rgba(51,57,138,0.05)', borderRadius: 6, borderLeft: '2px solid rgba(51,57,138,0.35)', fontFamily: FONT, lineHeight: 1.5 }}>
+                    <span style={{ fontWeight: 700, color: '#33398a', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>What changed · </span>{task.what_changed}
                   </div>
                 )}
                 {(task.attachments?.length || 0) > 0 && (
@@ -145,7 +148,7 @@ export default function EntryRow({
                         <img src={a.url} alt={a.name} style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, display: 'block', border: '1px solid rgba(0,0,0,0.08)' }} />
                       </a>
                     ) : (
-                      <a key={ai} href={a.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#0071E3', textDecoration: 'none', background: 'white', borderRadius: 6, padding: '4px 8px', fontFamily: FONT, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <a key={ai} href={a.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#33398a', textDecoration: 'none', background: 'white', borderRadius: 6, padding: '4px 8px', fontFamily: FONT, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {a.type === 'link' ? '🔗 ' : '📄 '}{a.name || a.url}
                       </a>
                     ))}
@@ -163,8 +166,8 @@ export default function EntryRow({
           {comments && comments.length > 0 && (
             <div style={{ marginTop: 8 }}>
               {comments.map(c => (
-                <div key={c.id} style={{ background: 'rgba(0,113,227,0.05)', border: '1px solid rgba(0,113,227,0.12)', borderRadius: 8, padding: '7px 12px', marginBottom: 6, fontSize: 13, color: '#1D1D1F', fontFamily: FONT }}>
-                  <span style={{ fontWeight: 600, color: '#0062C4', fontSize: 11 }}>Manager note · </span>{c.text}
+                <div key={c.id} style={{ background: 'rgba(51,57,138,0.05)', border: '1px solid rgba(51,57,138,0.12)', borderRadius: 8, padding: '7px 12px', marginBottom: 6, fontSize: 13, color: '#1D1D1F', fontFamily: FONT }}>
+                  <span style={{ fontWeight: 600, color: '#282d6e', fontSize: 11 }}>Manager note · </span>{c.text}
                 </div>
               ))}
             </div>
@@ -178,13 +181,13 @@ export default function EntryRow({
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {onToggleReviewed && (
               <button onClick={() => onToggleReviewed(entry.id)}
-                style={{ padding: '6px 14px', borderRadius: 980, fontSize: 12, fontWeight: 590, cursor: 'pointer', fontFamily: FONT, background: reviewed ? '#F5F5F7' : '#0071E3', color: reviewed ? '#6E6E73' : 'white', border: reviewed ? '1px solid rgba(0,0,0,0.1)' : 'none' }}>
+                style={{ padding: '6px 14px', borderRadius: 980, fontSize: 12, fontWeight: 590, cursor: 'pointer', fontFamily: FONT, background: reviewed ? '#F5F5F7' : '#33398a', color: reviewed ? '#6E6E73' : 'white', border: reviewed ? '1px solid rgba(0,0,0,0.1)' : 'none' }}>
                 {reviewed ? '↩ Unmark Reviewed' : '✓ Mark Reviewed'}
               </button>
             )}
             {onAddComment && !showCmt && (
               <button onClick={() => setShowCmt(true)}
-                style={{ padding: '6px 14px', borderRadius: 980, fontSize: 12, cursor: 'pointer', fontFamily: FONT, background: 'none', border: '1.5px solid rgba(0,113,227,0.3)', color: '#0071E3' }}>
+                style={{ padding: '6px 14px', borderRadius: 980, fontSize: 12, cursor: 'pointer', fontFamily: FONT, background: 'none', border: '1.5px solid rgba(51,57,138,0.3)', color: '#33398a' }}>
                 Add Note
               </button>
             )}
@@ -194,15 +197,15 @@ export default function EntryRow({
               <textarea
                 value={cmtText} onChange={e => setCmtText(e.target.value)}
                 placeholder="Add a note or feedback…" rows={2}
-                style={{ width: '100%', padding: '8px 12px', border: '1.5px solid rgba(0,113,227,0.25)', borderRadius: 8, fontSize: 13, fontFamily: FONT, resize: 'none', boxSizing: 'border-box', outline: 'none', background: 'white' }}
+                style={{ width: '100%', padding: '8px 12px', border: '1.5px solid rgba(51,57,138,0.25)', borderRadius: 8, fontSize: 13, fontFamily: FONT, resize: 'none', boxSizing: 'border-box', outline: 'none', background: 'white' }}
               />
               <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
                 <button onClick={handleAddComment} disabled={submitting}
-                  style={{ padding: '6px 14px', background: '#0071E3', color: 'white', border: 'none', borderRadius: 980, fontSize: 13, fontWeight: 590, cursor: 'pointer', fontFamily: FONT }}>
+                  style={{ padding: '6px 14px', background: '#33398a', color: 'white', border: 'none', borderRadius: 980, fontSize: 13, fontWeight: 590, cursor: 'pointer', fontFamily: FONT }}>
                   {submitting ? 'Adding…' : 'Add Note'}
                 </button>
                 <button onClick={() => { setShowCmt(false); setCmtText('') }}
-                  style={{ padding: '6px 14px', background: 'none', border: '1.5px solid rgba(0,113,227,0.3)', color: '#0071E3', borderRadius: 980, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
+                  style={{ padding: '6px 14px', background: 'none', border: '1.5px solid rgba(51,57,138,0.3)', color: '#33398a', borderRadius: 980, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
                   Cancel
                 </button>
               </div>

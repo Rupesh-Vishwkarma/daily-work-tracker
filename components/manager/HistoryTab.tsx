@@ -159,7 +159,7 @@ function WeeklyDashboard({ entries, projects, employees }: { entries: Entry[]; p
         <StatCard value={submittedDays} label="Days Submitted" color="#1D1D1F" />
         <StatCard value={totalH > 0 ? totalH + 'h' : '—'} label="Hours Logged" color="#6366F1" />
         <StatCard value={completionRate !== null ? completionRate + '%' : '—'} label="Tasks Done" color="#34C759" />
-        <StatCard value={projBreak.length || '—'} label="Projects" color="#0071E3" />
+        <StatCard value={projBreak.length || '—'} label="Projects" color="#33398a" />
       </div>
 
       {weekEntries.length === 0
@@ -171,13 +171,13 @@ function WeeklyDashboard({ entries, projects, employees }: { entries: Entry[]; p
               const dayEntry = weekEntries.find(e => e.date === date)
               const h = dayH[date] || 0
               const isSelected = selDay === date
-              const color = dayEntry ? WL_COLOR[dayEntry.workload] || '#0071E3' : '#E5E5EA'
+              const color = dayEntry ? WL_COLOR[dayEntry.workload] || '#33398a' : '#E5E5EA'
               return (
                 <div key={date} onClick={() => { if (dayEntry) setSelDay(isSelected ? null : date) }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, cursor: dayEntry ? 'pointer' : 'default', opacity: i >= 5 && !dayEntry ? 0.35 : 1 }}>
-                  <div style={{ width: 32, fontSize: 12, fontWeight: isSelected ? 700 : 500, color: isSelected ? '#0071E3' : '#6E6E73', flexShrink: 0, fontFamily: FONT }}>{DAYNAMES[i]}</div>
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, cursor: dayEntry ? 'pointer' : 'default', opacity: i >= 6 && !dayEntry ? 0.35 : 1 }}>
+                  <div style={{ width: 32, fontSize: 12, fontWeight: isSelected ? 700 : 500, color: isSelected ? '#33398a' : '#6E6E73', flexShrink: 0, fontFamily: FONT }}>{DAYNAMES[i]}</div>
                   <div style={{ flex: 1, height: 8, background: '#F2F2F7', borderRadius: 9999, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: dayEntry ? `${Math.max(4, (h / maxDayH) * 100)}%` : '0%', background: isSelected ? '#0071E3' : color, borderRadius: 9999, transition: 'width 0.3s' }} />
+                    <div style={{ height: '100%', width: dayEntry ? `${Math.max(4, (h / maxDayH) * 100)}%` : '0%', background: isSelected ? '#33398a' : color, borderRadius: 9999, transition: 'width 0.3s' }} />
                   </div>
                   <div style={{ width: 30, textAlign: 'right', fontSize: 12, color: h > 0 ? '#1D1D1F' : '#AEAEB2', fontWeight: h > 0 ? 600 : 400, flexShrink: 0, fontFamily: FONT }}>{h > 0 ? h + 'h' : '—'}</div>
                 </div>
@@ -244,7 +244,8 @@ function PeopleDashboard({ entries, projects, employees }: { entries: Entry[]; p
 
   function workingDays(s: string, end: string) {
     let c = 0; const d = new Date(s + 'T12:00:00'); const e = new Date(end + 'T12:00:00')
-    while (d <= e) { if (d.getDay() !== 0 && d.getDay() !== 6) c++; d.setDate(d.getDate() + 1) }
+    // Working week is Mon–Sat; only Sunday (day 0) is a non-working day.
+    while (d <= e) { if (d.getDay() !== 0) c++; d.setDate(d.getDate() + 1) }
     return c
   }
 
@@ -479,8 +480,8 @@ function CalendarView({ entries, projects, employees }: { entries: Entry[]; proj
             const hasE = dt.length > 0
             return (
               <div key={dStr} onClick={() => setSel(dStr)}
-                style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '6px 2px', borderRadius: 8, background: isSel ? '#0071E3' : isToday ? 'rgba(0,113,227,0.08)' : hasE ? '#F5F5F7' : 'transparent', border: isToday && !isSel ? '1.5px solid #0071E3' : '1.5px solid transparent', transition: 'background .12s' }}>
-                <span style={{ fontSize: 12, fontWeight: isToday || isSel ? 700 : 400, color: isSel ? 'white' : isToday ? '#0071E3' : '#1D1D1F', lineHeight: 1, fontFamily: FONT }}>{d}</span>
+                style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '6px 2px', borderRadius: 8, background: isSel ? '#33398a' : isToday ? 'rgba(51,57,138,0.08)' : hasE ? '#F5F5F7' : 'transparent', border: isToday && !isSel ? '1.5px solid #33398a' : '1.5px solid transparent', transition: 'background .12s' }}>
+                <span style={{ fontSize: 12, fontWeight: isToday || isSel ? 700 : 400, color: isSel ? 'white' : isToday ? '#33398a' : '#1D1D1F', lineHeight: 1, fontFamily: FONT }}>{d}</span>
                 <div style={{ display: 'flex', gap: 2, marginTop: 3, height: 5 }}>
                   {dt.map((c, j) => <div key={j} style={{ width: 4, height: 4, borderRadius: '50%', background: isSel ? 'rgba(255,255,255,0.7)' : c }} />)}
                 </div>
@@ -590,7 +591,7 @@ export default function HistoryTab() {
 
       {loading
         ? <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
-          <div style={{ width: 28, height: 28, border: '3px solid #F2F2F7', borderTopColor: '#0071E3', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+          <div style={{ width: 28, height: 28, border: '3px solid #F2F2F7', borderTopColor: '#33398a', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
         </div>
         : <>
           {view === 'list' && <ListView entries={entries} projects={projects} employees={employees} />}

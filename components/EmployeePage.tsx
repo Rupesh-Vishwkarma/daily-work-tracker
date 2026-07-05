@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, type MouseEvent as ReactMouseEvent } from 'react'
 import { Session, Entry, Project, ProjectTask, TaskStatus, Workload, Comment, Commitment, Attachment } from '@/lib/types'
 import { FONT, CARD, fmtDate as FMT_DATE } from '@/lib/ui'
 import { todayIST, nextWorkingDay, weekSaturday, dayOfWeek } from '@/lib/dates'
@@ -9,7 +9,7 @@ const TODAY = todayIST
 
 const TASK_STATUS: Record<TaskStatus, { label: string; color: string; bg: string }> = {
   completed:   { label: 'Done',        color: '#34C759', bg: 'rgba(52,199,89,0.1)' },
-  in_progress: { label: 'In Progress', color: '#0071E3', bg: 'rgba(0,113,227,0.1)' },
+  in_progress: { label: 'In Progress', color: '#33398a', bg: 'rgba(51,57,138,0.1)' },
   blocked:     { label: 'Blocked',     color: '#FF3B30', bg: 'rgba(255,59,48,0.1)' },
 }
 const WL: Record<Workload, { label: string; color: string; bg: string }> = {
@@ -24,10 +24,24 @@ const OUTCOME: Record<string, { label: string; color: string }> = {
   missed:  { label: 'Missed',  color: '#FF3B30' },
 }
 
+// Small uppercase field label used across the task form.
+const LBL = { display: 'block', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' as const, color: '#8a90a2', marginBottom: 5 }
+
+// Consistent pill "chip" for the task action bar (blocker / screenshot / link).
+const CHIP = {
+  display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px',
+  borderRadius: 980, fontSize: 12, fontWeight: 600, fontFamily: FONT, cursor: 'pointer',
+  borderWidth: 1, borderStyle: 'solid', borderColor: '#e2e2e2',
+  backgroundColor: 'white', color: '#5b6070', lineHeight: 1,
+  textTransform: 'none' as const, letterSpacing: 'normal', marginBottom: 0, transition: 'all .15s',
+}
+
 interface LocalTask extends ProjectTask {
   uid: number
   showBlockers: boolean
   uploading?: boolean
+  showLink?: boolean
+  linkDraft?: string
 }
 
 interface LocalPromise {
@@ -37,7 +51,7 @@ interface LocalPromise {
 }
 
 function mkTask(): LocalTask {
-  return { uid: Date.now() + Math.random(), project_id: '', task: '', time: '', status: 'in_progress', blockers: '', what_changed: '', attachments: [], showBlockers: false }
+  return { uid: Date.now() + Math.random(), project_id: '', task: '', time: '', status: 'in_progress', blockers: '', what_changed: '', attachments: [], showBlockers: false, showLink: false, linkDraft: '' }
 }
 
 function mkPromise(): LocalPromise {
@@ -48,7 +62,7 @@ function toLocalTask(t: ProjectTask): LocalTask {
   return { ...t, what_changed: t.what_changed || '', attachments: t.attachments || [], uid: Date.now() + Math.random(), showBlockers: !!t.blockers }
 }
 
-function toProjectTask({ uid: _u, showBlockers: _s, uploading: _up, ...rest }: LocalTask): ProjectTask {
+function toProjectTask({ uid: _u, showBlockers: _s, uploading: _up, showLink: _sl, linkDraft: _ld, ...rest }: LocalTask): ProjectTask {
   return rest
 }
 
@@ -65,6 +79,14 @@ function projectPill(proj: Project | undefined, other: boolean) {
 }
 
 // ── Attachment chips (shared display) ─────────────────────────────────────────
+// Open in a single new tab; preventDefault + stopPropagation so the native anchor
+// navigation and any ancestor click handler don't each fire (would open extra tabs).
+function openAttachment(e: ReactMouseEvent, url: string) {
+  e.preventDefault()
+  e.stopPropagation()
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
+
 function AttachmentChips({ attachments, onRemove }: { attachments: Attachment[]; onRemove?: (i: number) => void }) {
   if (!attachments.length) return null
   return (
@@ -72,18 +94,18 @@ function AttachmentChips({ attachments, onRemove }: { attachments: Attachment[];
       {attachments.map((a, i) => (
         <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#F5F5F7', borderRadius: 8, padding: '4px 8px', maxWidth: '100%' }}>
           {a.type === 'image' ? (
-            <a href={a.url} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
+            <a href={a.url} target="_blank" rel="noopener noreferrer" onClick={e => openAttachment(e, a.url)} style={{ display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={a.url} alt={a.name} style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 6, display: 'block' }} />
               <span style={{ fontSize: 11, color: '#6E6E73', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
             </a>
           ) : (
-            <a href={a.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#0071E3', textDecoration: 'none', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <a href={a.url} target="_blank" rel="noopener noreferrer" onClick={e => openAttachment(e, a.url)} style={{ fontSize: 12, color: '#33398a', textDecoration: 'none', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {a.type === 'link' ? '🔗 ' : '📄 '}{a.name || a.url}
             </a>
           )}
           {onRemove && (
-            <button onClick={() => onRemove(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#AEAEB2', fontSize: 14, lineHeight: 1, padding: 0, fontFamily: FONT }}>×</button>
+            <button onClick={e => { e.stopPropagation(); onRemove(i) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#AEAEB2', fontSize: 14, lineHeight: 1, padding: 0, fontFamily: FONT }}>×</button>
           )}
         </span>
       ))}
@@ -108,8 +130,8 @@ function TaskDisplay({ tasks, projects }: { tasks: ProjectTask[]; projects: Proj
             </div>
             <div style={{ color: '#1D1D1F', fontSize: 14, lineHeight: 1.55 }}>{t.task}</div>
             {t.what_changed && (
-              <div style={{ fontSize: 13, color: '#3C3C43', background: 'rgba(0,113,227,0.05)', padding: '8px 12px', borderRadius: 8, borderLeft: '3px solid rgba(0,113,227,0.35)', marginTop: 8, lineHeight: 1.5 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#0071E3', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>What changed</div>
+              <div style={{ fontSize: 13, color: '#3C3C43', background: 'rgba(51,57,138,0.05)', padding: '8px 12px', borderRadius: 8, borderLeft: '3px solid rgba(51,57,138,0.35)', marginTop: 8, lineHeight: 1.5 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#33398a', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>What changed</div>
                 {t.what_changed}
               </div>
             )}
@@ -133,10 +155,10 @@ function ManagerNotes({ comments }: { comments: Comment[] }) {
   return (
     <div style={{ marginTop: 12 }}>
       {comments.map(c => (
-        <div key={c.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 14px', background: 'rgba(0,113,227,0.06)', borderRadius: 10, borderLeft: '3px solid #0071E3', marginTop: 8 }}>
-          <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#0071E3', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 11, fontWeight: 700, color: 'white', fontFamily: FONT }}>M</div>
+        <div key={c.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 14px', background: 'rgba(51,57,138,0.06)', borderRadius: 10, borderLeft: '3px solid #33398a', marginTop: 8 }}>
+          <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#33398a', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 11, fontWeight: 700, color: 'white', fontFamily: FONT }}>M</div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#0071E3', fontFamily: FONT, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Manager note</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#33398a', fontFamily: FONT, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Manager note</div>
             <div style={{ fontSize: 13, color: '#1D1D1F', fontFamily: FONT, lineHeight: 1.5 }}>{c.text}</div>
           </div>
         </div>
@@ -160,7 +182,7 @@ function FollowUpCard({ promises, projects, onResolve }: {
   }
 
   return (
-    <div style={{ ...CARD, padding: '20px 24px', marginBottom: 16, border: '1px solid rgba(88,86,214,0.25)' }}>
+    <div style={{ ...CARD, padding: '20px 24px', marginBottom: 16, border: '1px solid rgba(75,62,157,0.25)' }}>
       <div style={{ fontWeight: 700, fontSize: 15, letterSpacing: '-0.02em', marginBottom: 4 }}>
         Step 1 · Follow up on your commitments
       </div>
@@ -172,7 +194,7 @@ function FollowUpCard({ promises, projects, onResolve }: {
         return (
           <div key={c.id} style={{ background: '#F5F5F7', borderRadius: 12, padding: '12px 14px', marginBottom: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
-              <span style={{ padding: '2px 8px', borderRadius: 980, fontSize: 11, fontWeight: 700, background: c.horizon === 'week' ? 'rgba(88,86,214,0.12)' : 'rgba(0,113,227,0.1)', color: c.horizon === 'week' ? '#5856D6' : '#0071E3' }}>
+              <span style={{ padding: '2px 8px', borderRadius: 980, fontSize: 11, fontWeight: 700, background: c.horizon === 'week' ? 'rgba(75,62,157,0.12)' : 'rgba(51,57,138,0.1)', color: c.horizon === 'week' ? '#4b3e9d' : '#33398a' }}>
                 {c.horizon === 'week' ? 'Weekly commitment' : 'Daily commitment'}
               </span>
               {projectPill(proj, c.project_id === '__other__')}
@@ -239,8 +261,8 @@ function MyStats({ entries, projects, commitments }: { entries: Entry[]; project
       <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.03em', color: '#1D1D1F', marginBottom: 20 }}>My Performance</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 12, marginBottom: 20 }}>
         {[
-          { v: reliability !== null ? reliability + '%' : '—', l: 'Commitment Reliability', c: '#5856D6' },
-          { v: myE.length, l: 'Total Updates', c: '#0071E3' },
+          { v: reliability !== null ? reliability + '%' : '—', l: 'Commitment Reliability', c: '#4b3e9d' },
+          { v: myE.length, l: 'Total Updates', c: '#33398a' },
           { v: completionRate !== null ? completionRate + '%' : '—', l: 'Completion Rate', c: '#34C759' },
           { v: totalHours > 0 ? totalHours.toFixed(1) + 'h' : '—', l: 'Hours Logged', c: '#6366F1' },
         ].map(s => (
@@ -418,11 +440,19 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
     }
   }
 
-  function attachLink(i: number) {
-    const url = window.prompt('Paste the link (URL):')
-    if (!url || !/^https?:\/\//i.test(url.trim())) return
-    const att: Attachment = { type: 'link', url: url.trim(), name: url.trim().replace(/^https?:\/\//i, '').slice(0, 60) }
-    setTasks(prev => prev.map((t, idx) => idx === i ? { ...t, attachments: [...(t.attachments || []), att] } : t))
+  function toggleLink(i: number) {
+    setTasks(prev => prev.map((t, idx) => idx === i ? { ...t, showLink: !t.showLink, linkDraft: t.showLink ? '' : (t.linkDraft || '') } : t))
+  }
+
+  function commitLink(i: number) {
+    setTasks(prev => prev.map((t, idx) => {
+      if (idx !== i) return t
+      const raw = (t.linkDraft || '').trim()
+      if (!raw) return t
+      const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
+      const att: Attachment = { type: 'link', url, name: url.replace(/^https?:\/\//i, '').slice(0, 60) }
+      return { ...t, attachments: [...(t.attachments || []), att], linkDraft: '', showLink: false }
+    }))
   }
 
   function removeAttachment(i: number, ai: number) {
@@ -475,7 +505,7 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
       if (editMode && todayEntry) {
         const res = await fetch('/api/entries', {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: todayEntry.id, project_tasks: validTasks.map(toProjectTask), workload })
+          body: JSON.stringify({ id: todayEntry.id, project_tasks: validTasks.map(toProjectTask), workload, submit_count: (todayEntry.submit_count || 1) + 1, is_absent: false })
         })
         if (!res.ok) { const d = await res.json(); setError(d.error || 'Update failed.'); return }
       } else {
@@ -536,7 +566,7 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
           <span className="navbar-title">Daily Tracker</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div className="avatar" style={{ background: 'rgba(0,113,227,0.1)', color: '#0071E3', fontSize: 13 }}>
+          <div className="avatar" style={{ background: 'rgba(51,57,138,0.1)', color: '#33398a', fontSize: 13 }}>
             {session.name.charAt(0).toUpperCase()}
           </div>
           <span style={{ fontSize: 14, fontWeight: 600, color: '#1D1D1F' }}>{session.name}</span>
@@ -582,28 +612,43 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
             {/* Submitted state */}
             {hasSubmitted && (
               <div>
-                <div style={{ ...CARD, padding: '28px 24px', textAlign: 'center', marginBottom: 16, background: 'linear-gradient(135deg,#F0FFF4,#F6FFFA)', border: '1px solid rgba(52,199,89,0.2)' }}>
-                  <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'rgba(52,199,89,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', fontSize: 24 }}>✓</div>
-                  <h3 style={{ color: '#1A6B31', fontWeight: 700, fontSize: 17, letterSpacing: '-0.02em', marginBottom: 6 }}>
-                    Today&apos;s update submitted
-                  </h3>
-                  <p style={{ color: '#2D8A45', fontSize: 14 }}>
-                    Submitted for {FMT_DATE(today)}. You can edit it until end of day.
-                  </p>
-                  <button onClick={startEdit} style={{ marginTop: 16, padding: '8px 20px', background: 'white', border: '1.5px solid #34C759', color: '#1A6B31', borderRadius: 980, fontSize: 14, fontWeight: 590, cursor: 'pointer', fontFamily: FONT }}>Edit Today&apos;s Update</button>
-                </div>
-                <TaskDisplay tasks={todayEntry.project_tasks} projects={projects} />
+                {todayEntry.is_absent ? (
+                  <div style={{ ...CARD, padding: '28px 24px', textAlign: 'center', marginBottom: 16, background: 'linear-gradient(135deg,#FFF9F0,#FFFBF6)', border: '1px solid rgba(255,149,0,0.25)' }}>
+                    <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'rgba(255,149,0,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', fontSize: 24 }}>🌙</div>
+                    <h3 style={{ color: '#B25900', fontWeight: 700, fontSize: 17, letterSpacing: '-0.02em', marginBottom: 6 }}>
+                      Marked absent today
+                    </h3>
+                    <p style={{ color: '#B25900', fontSize: 14 }}>
+                      Your manager marked you absent for {FMT_DATE(today)}. If you actually worked, log your update below.
+                    </p>
+                    <button onClick={startEdit} style={{ marginTop: 16, padding: '8px 20px', background: 'white', border: '1.5px solid #FF9500', color: '#B25900', borderRadius: 980, fontSize: 14, fontWeight: 590, cursor: 'pointer', fontFamily: FONT }}>I worked today — log my update</button>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ ...CARD, padding: '28px 24px', textAlign: 'center', marginBottom: 16, background: 'linear-gradient(135deg,#F0FFF4,#F6FFFA)', border: '1px solid rgba(52,199,89,0.2)' }}>
+                      <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'rgba(52,199,89,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', fontSize: 24 }}>✓</div>
+                      <h3 style={{ color: '#1A6B31', fontWeight: 700, fontSize: 17, letterSpacing: '-0.02em', marginBottom: 6 }}>
+                        Today&apos;s update submitted
+                      </h3>
+                      <p style={{ color: '#2D8A45', fontSize: 14 }}>
+                        Submitted for {FMT_DATE(today)}. You can edit it until end of day.
+                      </p>
+                      <button onClick={startEdit} style={{ marginTop: 16, padding: '8px 20px', background: 'white', border: '1.5px solid #34C759', color: '#1A6B31', borderRadius: 980, fontSize: 14, fontWeight: 590, cursor: 'pointer', fontFamily: FONT }}>Edit Today&apos;s Update</button>
+                    </div>
+                    <TaskDisplay tasks={todayEntry.project_tasks} projects={projects} />
+                  </>
+                )}
                 <ManagerNotes comments={commentsMap[todayEntry.id] || []} />
 
                 {/* Promises made for tomorrow / this week */}
                 {tomorrowsPromises.length > 0 && (
                   <div style={{ ...CARD, padding: '16px 20px', marginTop: 16 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: '#5856D6', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Your open commitments</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#4b3e9d', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Your open commitments</div>
                     {tomorrowsPromises.map(c => {
                       const proj = projects.find(p => p.id === c.project_id)
                       return (
                         <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid rgba(0,0,0,0.04)', flexWrap: 'wrap' }}>
-                          <span style={{ padding: '2px 8px', borderRadius: 980, fontSize: 10, fontWeight: 700, background: c.horizon === 'week' ? 'rgba(88,86,214,0.12)' : 'rgba(0,113,227,0.1)', color: c.horizon === 'week' ? '#5856D6' : '#0071E3', flexShrink: 0 }}>
+                          <span style={{ padding: '2px 8px', borderRadius: 980, fontSize: 10, fontWeight: 700, background: c.horizon === 'week' ? 'rgba(75,62,157,0.12)' : 'rgba(51,57,138,0.1)', color: c.horizon === 'week' ? '#4b3e9d' : '#33398a', flexShrink: 0 }}>
                             {c.horizon === 'week' ? 'WEEK' : 'DAY'}
                           </span>
                           <span style={{ fontSize: 13, color: '#1D1D1F', flex: 1, minWidth: 150 }}>{c.text}</span>
@@ -632,7 +677,7 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
                 </div>
 
                 {editMode && (
-                  <div style={{ padding: '10px 14px', borderRadius: 10, fontSize: 13, marginBottom: 14, background: 'rgba(0,113,227,0.06)', color: '#0062C4', border: '1px solid rgba(0,113,227,0.15)', fontWeight: 500 }}>
+                  <div style={{ padding: '10px 14px', borderRadius: 10, fontSize: 13, marginBottom: 14, background: 'rgba(51,57,138,0.06)', color: '#282d6e', border: '1px solid rgba(51,57,138,0.15)', fontWeight: 500 }}>
                     You can keep editing today&apos;s update until <strong>end of day</strong>, then it locks.
                   </div>
                 )}
@@ -648,22 +693,29 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
                     const si = TASK_STATUS[t.status] || TASK_STATUS.in_progress
                     return (
                       <div key={t.uid} style={{ background: 'white', borderRadius: 12, marginBottom: 8, border: `1px solid ${proj ? proj.color + '22' : 'rgba(0,0,0,0.07)'}`, borderLeft: `3px solid ${proj?.color || 'rgba(0,0,0,0.15)'}`, overflow: 'hidden' }}>
-                        {/* Row 1: circle • task text • time • remove */}
+                        {/* Row 1: status circle • task title (primary) • hours • remove */}
                         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '12px 12px 0' }}>
                           <div
                             onClick={() => toggleStatus(idx)}
-                            style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${si.color}`, background: t.status === 'completed' ? si.color : 'transparent', flexShrink: 0, marginTop: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                            title={t.status === 'completed' ? 'Completed — tap to reopen' : 'Tap to mark this task complete'}
+                            style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${si.color}`, backgroundColor: t.status === 'in_progress' ? 'transparent' : si.color, flexShrink: 0, marginTop: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
                           >
                             {t.status === 'completed' && <span style={{ color: 'white', fontSize: 10, fontWeight: 700, lineHeight: 1 }}>✓</span>}
+                            {t.status === 'blocked' && <span style={{ color: 'white', fontSize: 12, fontWeight: 800, lineHeight: 1 }}>!</span>}
+                            {t.status === 'in_progress' && <span style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: si.color }} />}
                           </div>
-                          <input
-                            type="text"
-                            value={t.task}
-                            onChange={e => updateTask(idx, 'task', e.target.value)}
-                            placeholder={`Task ${idx + 1}  What did you work on?`}
-                            style={{ flex: 1, border: 'none', fontSize: 14, fontFamily: FONT, outline: 'none', background: 'transparent', color: '#1D1D1F', padding: '0 0 0 8px', boxSizing: 'border-box', height: 28, boxShadow: 'none' }}
-                          />
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0, paddingTop: 2 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <label style={LBL}>Task {idx + 1} · Title</label>
+                            <input
+                              type="text"
+                              value={t.task}
+                              onChange={e => updateTask(idx, 'task', e.target.value)}
+                              placeholder="Short title — e.g. Fix casting latency"
+                              style={{ width: '100%', border: '1px solid #e6e8f0', borderRadius: 8, fontSize: 15, fontWeight: 600, fontFamily: FONT, outline: 'none', background: 'white', color: '#0a1d20', padding: '9px 11px', boxSizing: 'border-box', boxShadow: 'none' }}
+                            />
+                          </div>
+                          <div style={{ flexShrink: 0 }}>
+                            <label style={{ ...LBL, textAlign: 'center' }}>Hours</label>
                             <input
                               type="text"
                               inputMode="decimal"
@@ -672,33 +724,34 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
                                 const v = e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1')
                                 if (v === '' || v === '.' || (parseFloat(v) >= 0 && parseFloat(v) <= 24)) updateTask(idx, 'time', v)
                               }}
-                              placeholder="0h"
-                              title="Hours (optional)"
-                              style={{ width: 44, padding: '4px 6px', border: 'none', borderRadius: 6, background: '#F5F5F7', fontSize: 12, outline: 'none', textAlign: 'center', color: '#6E6E73', boxSizing: 'border-box', fontFamily: FONT, boxShadow: 'none' }}
+                              placeholder="0"
+                              title="Hours spent (optional)"
+                              style={{ width: 62, padding: '9px 6px', border: '1px solid #e6e8f0', borderRadius: 8, background: 'white', fontSize: 14, fontWeight: 600, outline: 'none', textAlign: 'center', color: '#2b3556', boxSizing: 'border-box', fontFamily: FONT, boxShadow: 'none' }}
                             />
-                            {tasks.length > 1 && (
-                              <button onClick={() => removeTask(idx)} style={{ width: 24, height: 24, background: 'none', border: 'none', cursor: 'pointer', color: '#AEAEB2', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', padding: 0, lineHeight: 1, fontFamily: FONT }}>×</button>
-                            )}
                           </div>
+                          {tasks.length > 1 && (
+                            <button onClick={() => removeTask(idx)} title="Remove task" style={{ width: 24, height: 24, marginTop: 24, background: 'none', border: 'none', cursor: 'pointer', color: '#AEAEB2', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', padding: 0, lineHeight: 1, fontFamily: FONT, flexShrink: 0 }}>×</button>
+                          )}
                         </div>
 
                         {/* Row 2: what changed since yesterday (required) */}
-                        <div style={{ padding: '8px 12px 0 44px' }}>
+                        <div style={{ padding: '10px 12px 0 40px' }}>
+                          <label style={LBL}>What changed since yesterday? <span style={{ color: '#e5484d' }}>*</span></label>
                           <textarea
                             value={t.what_changed || ''}
                             onChange={e => updateTask(idx, 'what_changed', e.target.value)}
-                            placeholder="What changed since yesterday? (required)"
+                            placeholder="Progress, decisions, or results since your last update…"
                             rows={2}
-                            style={{ width: '100%', padding: '8px 10px', border: '1px solid rgba(0,113,227,0.2)', borderRadius: 8, fontSize: 13, fontFamily: FONT, outline: 'none', resize: 'none', background: 'rgba(0,113,227,0.03)', boxSizing: 'border-box', lineHeight: 1.5, color: '#1D1D1F', boxShadow: 'none' }}
+                            style={{ width: '100%', padding: '8px 10px', border: '1px solid rgba(51,57,138,0.2)', borderRadius: 8, fontSize: 13, fontFamily: FONT, outline: 'none', resize: 'none', background: 'rgba(51,57,138,0.03)', boxSizing: 'border-box', lineHeight: 1.5, color: '#0a1d20', boxShadow: 'none' }}
                           />
                         </div>
 
                         {/* Row 3: project pill • status pill • blocker toggle • attach */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px 10px 44px', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 12px 10px 40px', flexWrap: 'wrap' }}>
                           <select
                             value={t.project_id}
                             onChange={e => updateTask(idx, 'project_id', e.target.value)}
-                            style={{ width: 'auto', padding: '4px 22px 4px 8px', fontSize: 12, borderRadius: 980, border: `1px solid ${proj ? proj.color + '40' : 'rgba(0,0,0,0.12)'}`, background: proj ? proj.color + '15' : '#F5F5F7', color: proj?.color || '#6E6E73', fontFamily: FONT, outline: 'none', fontWeight: 600, cursor: 'pointer', maxWidth: 160, backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath fill='%236E6E73' d='M0 0l4 5 4-5z'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 7px center', appearance: 'none', WebkitAppearance: 'none', boxShadow: 'none' }}
+                            style={{ width: 'auto', padding: '5px 22px 5px 10px', fontSize: 12, borderRadius: 980, border: `1px solid ${proj ? proj.color + '40' : 'rgba(0,0,0,0.12)'}`, backgroundColor: proj ? proj.color + '15' : '#F5F5F7', color: proj?.color || '#6E6E73', fontFamily: FONT, outline: 'none', fontWeight: 600, cursor: 'pointer', maxWidth: 160, backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath fill='%236E6E73' d='M0 0l4 5 4-5z'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 7px center', appearance: 'none', WebkitAppearance: 'none', boxShadow: 'none' }}
                           >
                             <option value="">— Project —</option>
                             {myProj.length > 0 && <optgroup label="My Projects">{myProj.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</optgroup>}
@@ -713,19 +766,32 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
                               updateTask(idx, 'status', s)
                               if (s === 'blocked') setTasks(prev => prev.map((tk, i) => i === idx ? { ...tk, showBlockers: true } : tk))
                             }}
-                            style={{ width: 'auto', padding: '4px 22px 4px 8px', fontSize: 12, borderRadius: 980, border: `1px solid ${si.color}40`, background: `${si.color}15`, color: si.color, fontFamily: FONT, outline: 'none', fontWeight: 600, cursor: 'pointer', backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath fill='%236E6E73' d='M0 0l4 5 4-5z'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 7px center', appearance: 'none', WebkitAppearance: 'none', boxShadow: 'none' }}
+                            style={{ width: 'auto', padding: '5px 22px 5px 10px', fontSize: 12, borderRadius: 980, border: `1px solid ${si.color}40`, backgroundColor: `${si.color}15`, color: si.color, fontFamily: FONT, outline: 'none', fontWeight: 600, cursor: 'pointer', backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath fill='%236E6E73' d='M0 0l4 5 4-5z'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 7px center', appearance: 'none', WebkitAppearance: 'none', boxShadow: 'none' }}
                           >
                             <option value="in_progress">In Progress</option>
                             <option value="completed">Completed</option>
                             <option value="blocked">Blocked</option>
                           </select>
 
-                          <button onClick={() => toggleBlockers(idx)} style={{ fontSize: 12, color: t.showBlockers ? '#FF9500' : '#AEAEB2', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: FONT, fontWeight: 500 }}>
-                            {t.showBlockers ? '− Blocker' : '+ Blocker'}
+                          <span style={{ width: 1, height: 18, background: '#e6e8f0', margin: '0 2px' }} />
+
+                          <button
+                            onClick={() => toggleBlockers(idx)}
+                            style={t.showBlockers
+                              ? { ...CHIP, borderColor: '#f5a623', backgroundColor: '#fdf3e2', color: '#a86a12' }
+                              : CHIP}
+                          >
+                            <span style={{ fontSize: 13, lineHeight: 1 }}>⚑</span>
+                            {t.showBlockers ? 'Blocker added' : 'Blocker'}
                           </button>
 
-                          <label style={{ fontSize: 12, color: '#0071E3', cursor: 'pointer', fontFamily: FONT, fontWeight: 500 }}>
-                            {t.uploading ? 'Uploading…' : '+ Screenshot'}
+                          <label
+                            style={t.uploading
+                              ? { ...CHIP, color: '#33398a', borderColor: 'rgba(51,57,138,0.25)', opacity: 0.6 }
+                              : { ...CHIP, color: '#33398a', borderColor: 'rgba(51,57,138,0.25)' }}
+                          >
+                            <span style={{ fontSize: 13, lineHeight: 1 }}>▣</span>
+                            {t.uploading ? 'Uploading…' : 'Screenshot'}
                             <input
                               type="file"
                               accept="image/*,.pdf,.txt,.csv"
@@ -734,21 +800,47 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
                               style={{ display: 'none' }}
                             />
                           </label>
-                          <button onClick={() => attachLink(idx)} style={{ fontSize: 12, color: '#0071E3', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: FONT, fontWeight: 500 }}>
-                            + Link
+
+                          <button
+                            onClick={() => toggleLink(idx)}
+                            style={t.showLink
+                              ? { ...CHIP, borderColor: '#33398a', backgroundColor: 'rgba(51,57,138,0.08)', color: '#282d6e' }
+                              : { ...CHIP, color: '#33398a', borderColor: 'rgba(51,57,138,0.25)' }}
+                          >
+                            <span style={{ fontSize: 13, lineHeight: 1 }}>🔗</span>
+                            Link
                           </button>
                         </div>
 
+                        {/* Inline link input */}
+                        {t.showLink && (
+                          <div style={{ padding: '0 12px 10px 40px', display: 'flex', gap: 6 }}>
+                            <input
+                              type="text"
+                              value={t.linkDraft || ''}
+                              placeholder="Paste a link (e.g. github.com/…)"
+                              autoFocus
+                              onChange={e => updateTask(idx, 'linkDraft', e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitLink(idx) } }}
+                              style={{ flex: 1, padding: '7px 10px', border: '1px solid rgba(51,57,138,0.25)', borderRadius: 8, fontSize: 13, fontFamily: FONT, outline: 'none', background: 'white', boxSizing: 'border-box' }}
+                            />
+                            <button onClick={() => commitLink(idx)} disabled={!(t.linkDraft || '').trim()} style={{ padding: '7px 14px', background: '#33398a', color: 'white', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, fontFamily: FONT, cursor: (t.linkDraft || '').trim() ? 'pointer' : 'not-allowed', opacity: (t.linkDraft || '').trim() ? 1 : 0.5 }}>
+                              Add
+                            </button>
+                          </div>
+                        )}
+
                         {/* Attachments */}
                         {(t.attachments?.length || 0) > 0 && (
-                          <div style={{ padding: '0 12px 10px 44px' }}>
+                          <div style={{ padding: '0 12px 10px 40px' }}>
                             <AttachmentChips attachments={t.attachments || []} onRemove={ai => removeAttachment(idx, ai)} />
                           </div>
                         )}
 
                         {/* Blocker textarea */}
                         {t.showBlockers && (
-                          <div style={{ padding: '0 12px 12px 44px' }}>
+                          <div style={{ padding: '0 12px 12px 40px' }}>
+                            <label style={{ ...LBL, color: '#B25900' }}>Blocker — what&apos;s stopping you?</label>
                             <textarea
                               value={t.blockers}
                               onChange={e => updateTask(idx, 'blockers', e.target.value)}
@@ -763,15 +855,15 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
                   })}
 
                   {/* Add task button (dashed) */}
-                  <button onClick={addTask} style={{ width: '100%', padding: '11px 12px', background: 'none', border: '1.5px dashed rgba(0,113,227,0.3)', borderRadius: 10, color: '#0071E3', fontSize: 14, cursor: 'pointer', fontFamily: FONT, fontWeight: 500, marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                  <button onClick={addTask} style={{ width: '100%', padding: '11px 12px', background: 'none', border: '1.5px dashed rgba(51,57,138,0.3)', borderRadius: 10, color: '#33398a', fontSize: 14, cursor: 'pointer', fontFamily: FONT, fontWeight: 500, marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                     + Add task
                   </button>
                 </div>
 
                 {/* Step 3: Commit — promises for tomorrow (new submissions only) */}
                 {!editMode && (
-                  <div style={{ marginBottom: 20, background: 'rgba(88,86,214,0.04)', border: '1px solid rgba(88,86,214,0.18)', borderRadius: 12, padding: '16px 16px 12px' }}>
-                    <div style={{ fontWeight: 700, fontSize: 14, letterSpacing: '-0.01em', marginBottom: 2, color: '#3C3C82' }}>
+                  <div style={{ marginBottom: 20, background: 'rgba(75,62,157,0.04)', border: '1px solid rgba(75,62,157,0.18)', borderRadius: 12, padding: '16px 16px 12px' }}>
+                    <div style={{ fontWeight: 700, fontSize: 14, letterSpacing: '-0.01em', marginBottom: 2, color: '#2b2f6b' }}>
                       Step {openFollowUps.length > 0 ? '3' : '2'} · Commit
                     </div>
                     <div style={{ fontSize: 12, color: '#6E6E73', marginBottom: 12 }}>
@@ -786,12 +878,12 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
                             value={p.text}
                             onChange={e => setPromises(prev => prev.map((x, i) => i === idx ? { ...x, text: e.target.value } : x))}
                             placeholder={`Commitment ${idx + 1} — what will be done?`}
-                            style={{ flex: 1, minWidth: 180, padding: '8px 10px', border: '1px solid rgba(88,86,214,0.25)', borderRadius: 8, fontSize: 13, fontFamily: FONT, outline: 'none', background: 'white', boxSizing: 'border-box', boxShadow: 'none' }}
+                            style={{ flex: 1, minWidth: 180, padding: '8px 10px', border: '1px solid rgba(75,62,157,0.25)', borderRadius: 8, fontSize: 13, fontFamily: FONT, outline: 'none', background: 'white', boxSizing: 'border-box', boxShadow: 'none' }}
                           />
                           <select
                             value={p.project_id}
                             onChange={e => setPromises(prev => prev.map((x, i) => i === idx ? { ...x, project_id: e.target.value } : x))}
-                            style={{ width: 'auto', padding: '6px 22px 6px 8px', fontSize: 12, borderRadius: 8, border: '1px solid rgba(0,0,0,0.1)', background: proj ? proj.color + '12' : 'white', color: proj?.color || '#6E6E73', fontFamily: FONT, outline: 'none', fontWeight: 600, cursor: 'pointer', maxWidth: 140, appearance: 'none', WebkitAppearance: 'none', backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath fill='%236E6E73' d='M0 0l4 5 4-5z'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 7px center', boxShadow: 'none' }}
+                            style={{ width: 'auto', padding: '6px 22px 6px 8px', fontSize: 12, borderRadius: 8, border: '1px solid rgba(0,0,0,0.1)', backgroundColor: proj ? proj.color + '12' : 'white', color: proj?.color || '#6E6E73', fontFamily: FONT, outline: 'none', fontWeight: 600, cursor: 'pointer', maxWidth: 140, appearance: 'none', WebkitAppearance: 'none', backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath fill='%236E6E73' d='M0 0l4 5 4-5z'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 7px center', boxShadow: 'none' }}
                           >
                             <option value="">— Project —</option>
                             {myProj.map(pr => <option key={pr.id} value={pr.id}>{pr.name}</option>)}
@@ -805,13 +897,13 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
                       )
                     })}
                     <button onClick={() => setPromises(prev => [...prev, mkPromise()])}
-                      style={{ fontSize: 12, color: '#5856D6', background: 'none', border: '1px dashed rgba(88,86,214,0.4)', borderRadius: 7, cursor: 'pointer', padding: '5px 10px', fontFamily: FONT, marginBottom: needWeekly ? 12 : 4 }}>
+                      style={{ fontSize: 12, color: '#4b3e9d', background: 'none', border: '1px dashed rgba(75,62,157,0.4)', borderRadius: 7, cursor: 'pointer', padding: '5px 10px', fontFamily: FONT, marginBottom: needWeekly ? 12 : 4 }}>
                       + Add commitment
                     </button>
 
                     {needWeekly && (
                       <div style={{ marginTop: 4 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: '#5856D6', marginBottom: 6 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#4b3e9d', marginBottom: 6 }}>
                           First update this week — what will you accomplish by Saturday?
                         </div>
                         <textarea
@@ -819,7 +911,7 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
                           onChange={e => setWeeklyPromise(e.target.value)}
                           placeholder="Your commitment for this week (required)"
                           rows={2}
-                          style={{ width: '100%', padding: '8px 10px', border: '1px solid rgba(88,86,214,0.3)', borderRadius: 8, fontSize: 13, fontFamily: FONT, outline: 'none', resize: 'none', background: 'white', boxSizing: 'border-box', lineHeight: 1.5, boxShadow: 'none' }}
+                          style={{ width: '100%', padding: '8px 10px', border: '1px solid rgba(75,62,157,0.3)', borderRadius: 8, fontSize: 13, fontFamily: FONT, outline: 'none', resize: 'none', background: 'white', boxSizing: 'border-box', lineHeight: 1.5, boxShadow: 'none' }}
                         />
                       </div>
                     )}
@@ -842,7 +934,7 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
                   </div>
                 </div>
 
-                <button onClick={handleSubmit} disabled={submitting} style={{ width: '100%', padding: '13px 22px', background: '#0071E3', color: 'white', border: 'none', borderRadius: 980, fontSize: 17, fontWeight: 590, fontFamily: FONT, cursor: submitting ? 'not-allowed' : 'pointer', opacity: submitting ? 0.6 : 1, letterSpacing: '-0.01em', transition: 'opacity .12s' }}>
+                <button onClick={handleSubmit} disabled={submitting} style={{ width: '100%', padding: '13px 22px', background: '#33398a', color: 'white', border: 'none', borderRadius: 980, fontSize: 17, fontWeight: 590, fontFamily: FONT, cursor: submitting ? 'not-allowed' : 'pointer', opacity: submitting ? 0.6 : 1, letterSpacing: '-0.01em', transition: 'opacity .12s' }}>
                   {submitting ? 'Submitting…' : editMode ? 'Save Changes' : "Submit Today's Update"}
                 </button>
               </div>
