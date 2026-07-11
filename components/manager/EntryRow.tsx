@@ -59,7 +59,8 @@ export default function EntryRow({
     <div style={{ ...CARD, marginBottom: 12, overflow: 'hidden' }}>
       {entry.is_absent && (
         <div style={{ background: 'rgba(255,149,0,0.08)', borderBottom: '1px solid rgba(255,149,0,0.15)', padding: '5px 20px', fontSize: 12, color: '#B25900', fontWeight: 500, fontFamily: FONT }}>
-          Marked absent by manager
+          {entry.submitted_by_manager ? 'Marked absent by manager' : 'Marked absent (self-reported)'}
+          {entry.absence_note && <span style={{ fontWeight: 400 }}> · {entry.absence_note}</span>}
         </div>
       )}
       {entry.submitted_by_manager && !entry.is_absent && (

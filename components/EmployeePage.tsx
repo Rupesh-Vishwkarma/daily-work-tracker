@@ -373,6 +373,9 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
   const [weeklyPromise, setWeeklyPromise] = useState('')
   const [workload, setWorkload] = useState<Workload>('medium')
   const [submitting, setSubmitting] = useState(false)
+  const [absentMode, setAbsentMode] = useState(false)
+  const [absentNote, setAbsentNote] = useState('')
+  const [markingAbsent, setMarkingAbsent] = useState(false)
   const [error, setError] = useState('')
   // Bumped on every error so the toast re-mounts and re-flashes even when the
   // same message fires twice in a row (e.g. repeated failed submits).
@@ -584,6 +587,26 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
     }
   }
 
+  async function handleMarkAbsent() {
+    setMarkingAbsent(true); setError('')
+    try {
+      const res = await fetch('/api/entries', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ employee_id: session.id, employee_name: session.name, date: today, workload: 'light', is_absent: true, project_tasks: [], absence_note: absentNote.trim() })
+      })
+      if (!res.ok) { const d = await res.json(); showError(d.error || 'Failed to mark absent.'); return }
+      setAbsentMode(false)
+      setAbsentNote('')
+      pendingRefresh.current = false
+      await fetchData()
+      sendNudge('employee_changed', { employeeId: session.id, kind: 'absent' })
+    } catch {
+      showError('Connection error. Please try again.')
+    } finally {
+      setMarkingAbsent(false)
+    }
+  }
+
   function startEdit() {
     if (!todayEntry) return
     setTasks(todayEntry.project_tasks?.length ? todayEntry.project_tasks.map(toLocalTask) : [mkTask()])
@@ -658,8 +681,47 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
         ) : (
           /* ── MY UPDATE TAB ── */
           <div>
+            {/* Not working today? — self-service absence */}
+            {!hasSubmitted && !editMode && (
+              absentMode ? (
+                <div style={{ ...CARD, padding: '18px 20px', marginBottom: 16, background: 'linear-gradient(135deg,#FFF9F0,#FFFBF6)', border: '1px solid rgba(255,149,0,0.25)' }}>
+                  <div style={{ fontWeight: 700, fontSize: 15, letterSpacing: '-0.02em', color: '#B25900', marginBottom: 4 }}>Mark yourself absent for {FMT_DATE(today)}?</div>
+                  <div style={{ fontSize: 13, color: '#B25900', marginBottom: 12, opacity: 0.85 }}>Your manager will see this instead of a work update. You can still log work later if plans change.</div>
+                  <label style={{ ...LBL, color: '#B25900' }}>Reason <span style={{ fontWeight: 500, textTransform: 'none', letterSpacing: 'normal', color: '#B25900', opacity: 0.7 }}>(optional)</span></label>
+                  <textarea
+                    value={absentNote}
+                    onChange={e => setAbsentNote(e.target.value)}
+                    placeholder="e.g. Sick leave, personal day, holiday…"
+                    rows={2}
+                    style={{ width: '100%', padding: '8px 10px', border: '1.5px solid rgba(255,149,0,0.35)', borderRadius: 8, fontSize: 13, fontFamily: FONT, outline: 'none', resize: 'none', background: 'white', boxSizing: 'border-box', lineHeight: 1.5, color: '#B25900', boxShadow: 'none', marginBottom: 12 }}
+                  />
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={handleMarkAbsent} disabled={markingAbsent}
+                      style={{ padding: '9px 18px', background: '#FF9500', color: 'white', border: 'none', borderRadius: 980, fontSize: 14, fontWeight: 600, fontFamily: FONT, cursor: markingAbsent ? 'not-allowed' : 'pointer', opacity: markingAbsent ? 0.6 : 1 }}>
+                      {markingAbsent ? 'Marking…' : 'Confirm absence'}
+                    </button>
+                    <button onClick={() => { setAbsentMode(false); setAbsentNote('') }} disabled={markingAbsent}
+                      style={{ padding: '9px 18px', background: 'white', border: '1.5px solid rgba(255,149,0,0.4)', color: '#B25900', borderRadius: 980, fontSize: 14, fontWeight: 590, fontFamily: FONT, cursor: 'pointer' }}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ ...CARD, padding: '12px 20px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: 180 }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: '#1D1D1F' }}>Not working today?</span>
+                    <span style={{ fontSize: 13, color: '#AEAEB2', marginLeft: 8 }}>Mark an absence instead.</span>
+                  </div>
+                  <button onClick={() => setAbsentMode(true)}
+                    style={{ padding: '7px 16px', background: 'white', border: '1.5px solid rgba(255,149,0,0.5)', color: '#B25900', borderRadius: 980, fontSize: 13, fontWeight: 600, fontFamily: FONT, cursor: 'pointer', flexShrink: 0 }}>
+                    Mark absent
+                  </button>
+                </div>
+              )
+            )}
+
             {/* Step 1: follow-up on open promises */}
-            {!hasSubmitted && openFollowUps.length > 0 && (
+            {!hasSubmitted && !absentMode && openFollowUps.length > 0 && (
               <FollowUpCard promises={openFollowUps} projects={projects} onResolve={resolvePromise} />
             )}
 
@@ -673,8 +735,15 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
                       Marked absent today
                     </h3>
                     <p style={{ color: '#B25900', fontSize: 14 }}>
-                      Your manager marked you absent for {FMT_DATE(today)}. If you actually worked, log your update below.
+                      {todayEntry.submitted_by_manager
+                        ? <>Your manager marked you absent for {FMT_DATE(today)}. If you actually worked, log your update below.</>
+                        : <>You marked yourself absent for {FMT_DATE(today)}. If plans change, you can still log your update below.</>}
                     </p>
+                    {todayEntry.absence_note && (
+                      <div style={{ display: 'inline-block', marginTop: 12, padding: '8px 14px', background: 'white', border: '1px solid rgba(255,149,0,0.3)', borderRadius: 10, fontSize: 13, color: '#B25900', maxWidth: '100%' }}>
+                        <span style={{ fontWeight: 700, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Reason · </span>{todayEntry.absence_note}
+                      </div>
+                    )}
                     <button onClick={startEdit} style={{ marginTop: 16, padding: '8px 20px', background: 'white', border: '1.5px solid #FF9500', color: '#B25900', borderRadius: 980, fontSize: 14, fontWeight: 590, cursor: 'pointer', fontFamily: FONT }}>I worked today — log my update</button>
                   </div>
                 ) : (
@@ -717,7 +786,7 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
             )}
 
             {/* Form (new or edit) */}
-            {(!hasSubmitted || editMode) && (
+            {(!hasSubmitted || editMode) && !absentMode && (
               <div style={{ ...CARD, padding: 24 }}>
                 <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', letterSpacing: '-0.02em' }}>
                   <div>

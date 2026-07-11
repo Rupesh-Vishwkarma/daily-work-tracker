@@ -131,7 +131,9 @@ function buildCSV(data: ExportData, opts: Options, periodFrom: string, periodTo:
       ? [e.is_absent ? 'yes' : 'no', e.submitted_by_manager ? 'yes' : 'no', reviewedSet.has(e.id) ? 'yes' : 'no', e.submit_count, e.timestamp]
       : []
     if (tasks.length === 0) {
-      const cells = [...base, ...flagCells, '', '', '', '', '', '']
+      // Surface an absence (and any reason) in the Task column so the row isn't blank.
+      const label = e.is_absent ? (e.absence_note ? `Absent — ${e.absence_note}` : 'Absent') : ''
+      const cells = [...base, ...flagCells, '', label, '', '', '', '']
       if (opts.attachments) cells.push('')
       lines.push(row(cells))
       continue

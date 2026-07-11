@@ -59,6 +59,7 @@ export interface Entry {
   is_absent: boolean
   submitted_by_manager: boolean
   project_tasks: ProjectTask[]
+  absence_note?: string | null
 }
 
 export interface Project {

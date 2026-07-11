@@ -206,6 +206,7 @@ export default function TodayTab({ managerSession }: { managerSession: Session }
   )
   const submitted = nonMgrEmps.filter(e => empEntryMap[e.id] && !empEntryMap[e.id].is_absent)
   const missing = nonMgrEmps.filter(e => !empEntryMap[e.id])
+  const absentEmps = nonMgrEmps.filter(e => empEntryMap[e.id]?.is_absent)
   const heavy = submitted.filter(e => empEntryMap[e.id]?.workload === 'heavy')
   const medium = submitted.filter(e => empEntryMap[e.id]?.workload === 'medium')
   const light = submitted.filter(e => empEntryMap[e.id]?.workload === 'light')
@@ -346,6 +347,25 @@ export default function TodayTab({ managerSession }: { managerSession: Session }
       {missing.length === 0 && !activeFilter && (
         <div style={{ ...CARD, padding: '14px 20px', marginBottom: 16, borderLeft: '3px solid #34C759' }}>
           <div style={{ color: '#1A6B31', fontWeight: 600, fontSize: 14, fontFamily: FONT }}>All team members have submitted today ✓</div>
+        </div>
+      )}
+
+      {/* Absent today */}
+      {absentEmps.length > 0 && !activeFilter && (
+        <div style={{ ...CARD, padding: '16px 20px', marginBottom: 16, borderLeft: '3px solid #FF9500' }}>
+          <div style={{ fontWeight: 600, color: '#B25900', marginBottom: 12, fontSize: 14, fontFamily: FONT }}>Absent Today ({absentEmps.length})</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {absentEmps.map(e => {
+              const ent = empEntryMap[e.id]
+              return (
+                <div key={e.id} style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ padding: '4px 10px', borderRadius: 980, fontSize: 13, fontWeight: 500, background: 'rgba(255,149,0,0.1)', color: '#B25900', fontFamily: FONT }}>{e.name}</span>
+                  <span style={{ fontSize: 12, color: '#AEAEB2', fontFamily: FONT }}>{ent?.submitted_by_manager ? 'marked by manager' : 'self-reported'}</span>
+                  {ent?.absence_note && <span style={{ fontSize: 13, color: '#6E6E73', fontFamily: FONT }}>· {ent.absence_note}</span>}
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
 
