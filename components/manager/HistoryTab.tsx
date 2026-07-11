@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { Entry, Employee, Project, Comment } from '@/lib/types'
 import { FONT, CARD, fmtDate } from '@/lib/ui'
 import EntryRow from './EntryRow'
+import ExportDialog from './ExportDialog'
 import { todayIST } from '@/lib/dates'
 import { useNudge } from '@/lib/realtime'
 
@@ -528,6 +529,7 @@ export default function HistoryTab() {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
+  const [showExport, setShowExport] = useState(false)
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
@@ -564,15 +566,23 @@ export default function HistoryTab() {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, gap: 12, flexWrap: 'wrap' }}>
         <div style={{ fontWeight: 700, fontSize: 22, color: '#1D1D1F', fontFamily: FONT, letterSpacing: '-0.02em' }}>History</div>
-        <div style={{ display: 'flex', gap: 3, background: '#F2F2F7', borderRadius: 10, padding: 3 }}>
-          {VIEWS.map(v => (
-            <button key={v.id} onClick={() => setView(v.id)}
-              style={{ padding: '6px 14px', borderRadius: 7, border: 'none', cursor: 'pointer', background: view === v.id ? 'white' : 'transparent', color: view === v.id ? '#1D1D1F' : '#6E6E73', fontWeight: view === v.id ? 600 : 400, fontSize: 13, fontFamily: FONT, boxShadow: view === v.id ? '0 1px 4px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.15s' }}>
-              {v.label}
-            </button>
-          ))}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 3, background: '#F2F2F7', borderRadius: 10, padding: 3 }}>
+            {VIEWS.map(v => (
+              <button key={v.id} onClick={() => setView(v.id)}
+                style={{ padding: '6px 14px', borderRadius: 7, border: 'none', cursor: 'pointer', background: view === v.id ? 'white' : 'transparent', color: view === v.id ? '#1D1D1F' : '#6E6E73', fontWeight: view === v.id ? 600 : 400, fontSize: 13, fontFamily: FONT, boxShadow: view === v.id ? '0 1px 4px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.15s' }}>
+                {v.label}
+              </button>
+            ))}
+          </div>
+          <button onClick={() => setShowExport(true)}
+            style={{ padding: '7px 16px', borderRadius: 980, border: 'none', cursor: 'pointer', background: '#33398a', color: 'white', fontWeight: 600, fontSize: 13, fontFamily: FONT, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            ↓ Export
+          </button>
         </div>
       </div>
+
+      {showExport && <ExportDialog employees={employees} projects={projects} onClose={() => setShowExport(false)} />}
 
       {/* Date range (for list view) */}
       {view === 'list' && (
