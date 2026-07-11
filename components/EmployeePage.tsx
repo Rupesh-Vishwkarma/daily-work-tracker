@@ -374,11 +374,19 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
   const [workload, setWorkload] = useState<Workload>('medium')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  // Bumped on every error so the toast re-mounts and re-flashes even when the
+  // same message fires twice in a row (e.g. repeated failed submits).
+  const [errorSeq, setErrorSeq] = useState(0)
   const [broadcast, setBroadcast] = useState<{ message: string; active: boolean } | null>(null)
   const [broadcastDismissed, setBroadcastDismissed] = useState(false)
   const [commentsMap, setCommentsMap] = useState<Record<string, Comment[]>>({})
   // A manager change that lands mid-edit is remembered here and applied on exit.
   const pendingRefresh = useRef(false)
+
+  const showError = useCallback((msg: string) => {
+    setError(msg)
+    setErrorSeq(s => s + 1)
+  }, [])
 
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
@@ -411,7 +419,7 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
         setCommentsMap(map)
       }
     } catch {
-      setError('Failed to load data. Please refresh.')
+      showError('Failed to load data. Please refresh.')
     } finally {
       if (!silent) setLoading(false)
     }
@@ -436,6 +444,14 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
     }
   }, [editMode, submitting, fetchData])
 
+  // Auto-dismiss the error toast so it doesn't linger after the user has read it.
+  // Keyed on errorSeq too, so a repeated error restarts the countdown.
+  useEffect(() => {
+    if (!error) return
+    const t = setTimeout(() => setError(''), 6000)
+    return () => clearTimeout(t)
+  }, [error, errorSeq])
+
   function updateTask(i: number, field: keyof LocalTask, value: string | boolean) {
     setTasks(prev => prev.map((t, idx) => idx === i ? { ...t, [field]: value } : t))
   }
@@ -454,7 +470,7 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
       const att = await uploadAttachment(file)
       setTasks(prev => prev.map((t, idx) => idx === i ? { ...t, attachments: [...(t.attachments || []), att] } : t))
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Upload failed')
+      showError(e instanceof Error ? e.message : 'Upload failed')
     } finally {
       updateTask(i, 'uploading', false)
     }
@@ -486,7 +502,7 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
     const res = await fetch('/api/commitments', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
     })
-    if (!res.ok) { const d = await res.json(); setError(d.error || 'Failed to update commitment.'); return }
+    if (!res.ok) { const d = await res.json(); showError(d.error || 'Failed to update commitment.'); return }
     const d = await res.json()
     setCommitments(prev => prev.map(c => c.id === id ? d.commitment : c))
     sendNudge('employee_changed', { employeeId: session.id, kind: 'commitment' })
@@ -505,19 +521,19 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
 
   async function handleSubmit() {
     const validTasks = tasks.filter(t => t.task.trim())
-    if (validTasks.length === 0) { setError('Add at least one task.'); return }
+    if (validTasks.length === 0) { showError('Add at least one task.'); return }
     if (validTasks.some(t => !(t.what_changed || '').trim())) {
-      setError('Fill in "What changed since yesterday?" for every task.'); return
+      showError('Fill in "What changed since yesterday?" for every task.'); return
     }
     if (openFollowUps.length > 0) {
-      setError('Close out your open commitments above before submitting.'); return
+      showError('Close out your open commitments above before submitting.'); return
     }
     const validPromises = promises.filter(p => p.text.trim())
     if (!editMode && validPromises.length === 0) {
-      setError("Add at least one commitment for tomorrow — what will you accomplish?"); return
+      showError("Add at least one commitment for tomorrow — what will you accomplish?"); return
     }
     if (!editMode && needWeekly && !weeklyPromise.trim()) {
-      setError('This is your first update of the week — add your weekly commitment.'); return
+      showError('This is your first update of the week — add your weekly commitment.'); return
     }
 
     setSubmitting(true); setError('')
@@ -528,13 +544,13 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id: todayEntry.id, project_tasks: validTasks.map(toProjectTask), workload, submit_count: (todayEntry.submit_count || 1) + 1, is_absent: false })
         })
-        if (!res.ok) { const d = await res.json(); setError(d.error || 'Update failed.'); return }
+        if (!res.ok) { const d = await res.json(); showError(d.error || 'Update failed.'); return }
       } else {
         const res = await fetch('/api/entries', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ employee_id: session.id, employee_name: session.name, date: today, workload, project_tasks: validTasks.map(toProjectTask) })
         })
-        if (!res.ok) { const d = await res.json(); setError(d.error || 'Submission failed.'); return }
+        if (!res.ok) { const d = await res.json(); showError(d.error || 'Submission failed.'); return }
         const d = await res.json()
         entryId = d.entry?.id
 
@@ -551,7 +567,7 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ commitments: rows })
           })
-          if (!cRes.ok) { const d2 = await cRes.json(); setError(d2.error || 'Saving commitments failed.'); return }
+          if (!cRes.ok) { const d2 = await cRes.json(); showError(d2.error || 'Saving commitments failed.'); return }
         }
       }
       setEditMode(false)
@@ -562,7 +578,7 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
       // Nudge the manager's dashboard to refresh with this submission/edit.
       sendNudge('employee_changed', { employeeId: session.id, kind: 'entry' })
     } catch {
-      setError('Connection error. Please try again.')
+      showError('Connection error. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -582,6 +598,20 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
 
   return (
     <div style={{ minHeight: '100vh', fontFamily: FONT }}>
+      {/* Fixed error toast — always visible on submit, no scrolling needed */}
+      {error && (
+        <div key={errorSeq} className="toast-wrap" role="alert" aria-live="assertive">
+          <div className="toast toast-error">
+            <span className="toast-icon">!</span>
+            <div className="toast-body">
+              <div className="toast-title">Can&apos;t submit yet</div>
+              <div className="toast-msg">{error}</div>
+            </div>
+            <button className="toast-close" onClick={() => setError('')} aria-label="Dismiss">×</button>
+          </div>
+        </div>
+      )}
+
       {/* NavBar */}
       <nav className="navbar">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -704,10 +734,6 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
                   <div style={{ padding: '10px 14px', borderRadius: 10, fontSize: 13, marginBottom: 14, background: 'rgba(51,57,138,0.06)', color: '#282d6e', border: '1px solid rgba(51,57,138,0.15)', fontWeight: 500 }}>
                     You can keep editing today&apos;s update until <strong>end of day</strong>, then it locks.
                   </div>
-                )}
-
-                {error && (
-                  <div style={{ padding: '10px 14px', borderRadius: 10, fontSize: 14, marginBottom: 14, background: 'rgba(255,59,48,0.08)', color: '#CC0000', border: '1px solid rgba(255,59,48,0.15)' }}>{error}</div>
                 )}
 
                 {/* Task rows */}
