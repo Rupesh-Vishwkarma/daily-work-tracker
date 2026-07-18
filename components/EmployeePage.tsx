@@ -19,11 +19,15 @@ const WL: Record<Workload, { label: string; color: string; bg: string }> = {
   heavy:  { label: 'Heavy',  color: '#FF3B30', bg: 'rgba(255,59,48,0.1)' },
 }
 
-const OUTCOME: Record<string, { label: string; color: string }> = {
-  done:    { label: 'Done',    color: '#34C759' },
-  partial: { label: 'Partial', color: '#FF9500' },
-  missed:  { label: 'Missed',  color: '#FF3B30' },
-}
+// Resolution actions on a follow-up. "Completed" closes the commitment; "Partial"
+// and "Carry Forward" both roll it forward and keep it open (Partial = some
+// progress made, Carry Forward = none). There is no "Missed" outcome.
+const RESOLVE_ACTIONS = [
+  { id: 'done' as const,    label: 'Completed',     color: '#34C759', solid: true },
+  { id: 'partial' as const, label: 'Partial',       color: '#FF9500', solid: false },
+  { id: 'carry' as const,   label: 'Carry Forward', color: '#6E6E73', solid: false },
+]
+type ResolveAction = (typeof RESOLVE_ACTIONS)[number]['id']
 
 // Small uppercase field label used across the task form.
 const LBL = { display: 'block', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' as const, color: '#8a90a2', marginBottom: 5 }
@@ -180,27 +184,30 @@ function ManagerNotes({ comments }: { comments: Comment[] }) {
   )
 }
 
-// ── Step 1: Follow-up on open promises ────────────────────────────────────────
-function FollowUpCard({ promises, projects, onResolve }: {
+// ── Follow-up card: resolve open commitments (daily block + weekly reminder) ───
+function FollowUpCard({ promises, projects, onResolve, title, subtitle, accent = '#4b3e9d' }: {
   promises: Commitment[]
   projects: Project[]
-  onResolve: (id: string, action: 'done' | 'partial' | 'missed' | 'carry', note: string) => Promise<void>
+  onResolve: (id: string, action: ResolveAction, note: string) => Promise<void>
+  title: string
+  subtitle: string
+  accent?: string
 }) {
   const [notes, setNotes] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState<string | null>(null)
 
-  async function act(id: string, action: 'done' | 'partial' | 'missed' | 'carry') {
+  async function act(id: string, action: ResolveAction) {
     setBusy(id)
     try { await onResolve(id, action, notes[id] || '') } finally { setBusy(null) }
   }
 
   return (
-    <div style={{ ...CARD, padding: '20px 24px', marginBottom: 16, border: '1px solid rgba(75,62,157,0.25)' }}>
+    <div style={{ ...CARD, padding: '20px 24px', marginBottom: 16, border: `1px solid ${accent}40` }}>
       <div style={{ fontWeight: 700, fontSize: 15, letterSpacing: '-0.02em', marginBottom: 4 }}>
-        Step 1 · Follow up on your commitments
+        {title}
       </div>
       <div style={{ fontSize: 13, color: '#6E6E73', marginBottom: 14 }}>
-        Close these out before submitting today&apos;s update.
+        {subtitle}
       </div>
       {promises.map(c => {
         const proj = projects.find(p => p.id === c.project_id)
@@ -216,6 +223,7 @@ function FollowUpCard({ promises, projects, onResolve }: {
                   ⟳ carried ×{c.carry_count}
                 </span>
               )}
+              <span style={{ fontSize: 11, color: '#AEAEB2', marginLeft: 'auto' }}>due {fmtDue(c.due_date)}</span>
             </div>
             <div style={{ fontSize: 14, color: '#1D1D1F', lineHeight: 1.5, marginBottom: 10 }}>{c.text}</div>
             <input
@@ -226,18 +234,12 @@ function FollowUpCard({ promises, projects, onResolve }: {
               style={{ width: '100%', padding: '7px 10px', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 8, fontSize: 13, fontFamily: FONT, outline: 'none', background: 'white', boxSizing: 'border-box', marginBottom: 8, boxShadow: 'none' }}
             />
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {(['done', 'partial', 'missed'] as const).map(a => (
-                <button key={a} disabled={busy === c.id} onClick={() => act(c.id, a)}
-                  style={{ padding: '6px 14px', borderRadius: 980, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, border: `1.5px solid ${OUTCOME[a].color}50`, background: OUTCOME[a].color + '12', color: OUTCOME[a].color, opacity: busy === c.id ? 0.5 : 1 }}>
-                  {OUTCOME[a].label}
+              {RESOLVE_ACTIONS.map(a => (
+                <button key={a.id} disabled={busy === c.id} onClick={() => act(c.id, a.id)}
+                  style={{ padding: '6px 14px', borderRadius: 980, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, border: `1.5px solid ${a.color}${a.solid ? '' : '80'}`, background: a.solid ? a.color : a.color + '12', color: a.solid ? 'white' : a.color, opacity: busy === c.id ? 0.5 : 1 }}>
+                  {c.horizon === 'week' && a.id === 'carry' ? 'Carry to next week' : a.label}
                 </button>
               ))}
-              {c.horizon === 'day' && (
-                <button disabled={busy === c.id} onClick={() => act(c.id, 'carry')}
-                  style={{ padding: '6px 14px', borderRadius: 980, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, border: '1.5px solid rgba(0,0,0,0.12)', background: 'white', color: '#6E6E73', opacity: busy === c.id ? 0.5 : 1 }}>
-                  Carry to next day →
-                </button>
-              )}
             </div>
           </div>
         )
@@ -250,9 +252,13 @@ function FollowUpCard({ promises, projects, onResolve }: {
 function MyStats({ entries, projects, commitments }: { entries: Entry[]; projects: Project[]; commitments: Commitment[] }) {
   const myE = entries.filter(e => !e.is_absent).sort((a, b) => b.date.localeCompare(a.date))
 
-  const resolved = commitments.filter(c => c.status !== 'open')
-  const delivered = resolved.filter(c => c.status === 'done').length
-  const reliability = resolved.length ? Math.round(delivered / resolved.length * 100) : null
+  // Completed commitments are the closing outcome; "on-time" = completed without
+  // ever carrying forward. Reliability = on-time ÷ completed. Open (carried) ones
+  // are still in flight and excluded until finished.
+  const completedC = commitments.filter(c => c.status === 'done')
+  const openC = commitments.filter(c => c.status === 'open')
+  const onTime = completedC.filter(c => (c.carry_count || 0) === 0).length
+  const reliability = completedC.length ? Math.round(onTime / completedC.length * 100) : null
 
   if (!myE.length && !commitments.length) return (
     <div style={{ background: 'white', borderRadius: 16, boxShadow: '0 1px 0 rgba(0,0,0,0.04),0 2px 16px rgba(0,0,0,0.05)', padding: '56px 20px', textAlign: 'center' }}>
@@ -274,7 +280,7 @@ function MyStats({ entries, projects, commitments }: { entries: Entry[]; project
       <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.03em', color: '#1D1D1F', marginBottom: 20 }}>My Performance</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 12, marginBottom: 20 }}>
         {[
-          { v: reliability !== null ? reliability + '%' : '—', l: 'Commitment Reliability', c: '#4b3e9d' },
+          { v: reliability !== null ? reliability + '%' : '—', l: 'On-time Delivery', c: '#4b3e9d' },
           { v: myE.length, l: 'Total Updates', c: '#33398a' },
           { v: completionRate !== null ? completionRate + '%' : '—', l: 'Completion Rate', c: '#34C759' },
           { v: totalHours > 0 ? totalHours.toFixed(1) + 'h' : '—', l: 'Hours Logged', c: '#6366F1' },
@@ -286,21 +292,22 @@ function MyStats({ entries, projects, commitments }: { entries: Entry[]; project
         ))}
       </div>
 
-      {/* Promise outcomes */}
-      {resolved.length > 0 && (
+      {/* Commitment outcomes */}
+      {(completedC.length > 0 || openC.length > 0) && (
         <div style={{ ...CARD, padding: '20px 24px', marginBottom: 16 }}>
           <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4, letterSpacing: '-0.02em' }}>Commitment Outcomes (last 30 days)</div>
-          <div style={{ fontSize: 12, color: '#AEAEB2', marginBottom: 14 }}>Delivered ÷ committed — your headline accountability number.</div>
+          <div style={{ fontSize: 12, color: '#AEAEB2', marginBottom: 14 }}>On-time = completed without ever carrying forward — your headline accountability number.</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {(['done', 'partial', 'missed'] as const).map(k => {
-              const count = resolved.filter(c => c.status === k).length
-              return (
-                <div key={k} style={{ flex: '1 0 calc(33% - 6px)', background: OUTCOME[k].color + '12', borderRadius: 12, padding: '12px 14px', textAlign: 'center' }}>
-                  <div style={{ fontSize: 22, fontWeight: 700, color: OUTCOME[k].color, letterSpacing: '-0.03em' }}>{count}</div>
-                  <div style={{ fontSize: 11, color: OUTCOME[k].color, marginTop: 2, fontWeight: 600 }}>{OUTCOME[k].label}</div>
-                </div>
-              )
-            })}
+            {[
+              { label: 'Completed', color: '#34C759', count: completedC.length },
+              { label: 'On-time', color: '#4b3e9d', count: onTime },
+              { label: 'In progress', color: '#FF9500', count: openC.length },
+            ].map(k => (
+              <div key={k.label} style={{ flex: '1 0 calc(33% - 6px)', background: k.color + '12', borderRadius: 12, padding: '12px 14px', textAlign: 'center' }}>
+                <div style={{ fontSize: 22, fontWeight: 700, color: k.color, letterSpacing: '-0.03em' }}>{k.count}</div>
+                <div style={{ fontSize: 11, color: k.color, marginTop: 2, fontWeight: 600 }}>{k.label}</div>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -510,10 +517,17 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
     setTasks(prev => prev.map((t, idx) => idx === i ? { ...t, attachments: (t.attachments || []).filter((_, j) => j !== ai) } : t))
   }
 
-  async function resolvePromise(id: string, action: 'done' | 'partial' | 'missed' | 'carry', note: string) {
-    const body = action === 'carry'
-      ? { id, action: 'carry', outcome_note: note }
-      : { id, status: action, outcome_note: note }
+  async function resolvePromise(id: string, action: ResolveAction, note: string) {
+    // Partial and Carry Forward both roll the task forward (status stays open);
+    // Partial marks that some progress was made. Completed closes it.
+    let body: Record<string, unknown>
+    if (action === 'done') {
+      body = { id, status: 'done', outcome_note: note }
+    } else if (action === 'partial') {
+      body = { id, action: 'carry', outcome_note: note.trim() ? `Partial: ${note.trim()}` : 'Partial progress' }
+    } else {
+      body = { id, action: 'carry', outcome_note: note }
+    }
     const res = await fetch('/api/commitments', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
     })
@@ -524,18 +538,25 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
   }
 
   const today = TODAY()
-
-  // Step 1 gate: open promises due today or earlier must be resolved first.
-  const openFollowUps = commitments.filter(c => c.status === 'open' && c.due_date <= today)
-  // The week runs Sun–Sat. Sunday is a non-working day, so the first login of the
-  // week is normally Monday. The weekly commitment is shown on that first login
-  // and is due that week's Saturday. If the employee's first login of the week is
-  // Saturday (i.e. no weekly commitment exists yet by the last working day), we
-  // skip the weekly commitment entirely for that week — there is no room left to
-  // deliver on it.
-  const thisWeekSat = weekSaturday(today)
-  const needWeekly = dayOfWeek(today) !== 6 && !commitments.some(c => c.horizon === 'week' && c.due_date === thisWeekSat)
   const nextDay = nextWorkingDay(today)
+
+  // Only DAILY commitments block submission (due today or earlier must be resolved).
+  const openDailyFollowUps = commitments.filter(c => c.status === 'open' && c.horizon === 'day' && c.due_date <= today)
+  // A carried/open weekly commitment is a persistent, NON-blocking reminder shown
+  // every day until Completed.
+  const openWeekly = commitments.filter(c => c.status === 'open' && c.horizon === 'week')
+  const hasOpenWeekly = openWeekly.length > 0
+  // A new daily commitment is optional if one is already committed for the next
+  // day (e.g. today's task was carried forward — it now serves as tomorrow's goal).
+  const hasNextDayDaily = commitments.some(c => c.status === 'open' && c.horizon === 'day' && c.due_date >= nextDay)
+
+  // The week runs Sun–Sat (Sunday non-working, so the first login is normally
+  // Monday). Rule: always have exactly one open weekly commitment. A new weekly
+  // is mandatory when none is open — first login of the week, or right after
+  // completing one mid-week (then it targets this week's Saturday). Skipped when
+  // a carried weekly is still open, or when the first login of the week is Saturday.
+  const thisWeekSat = weekSaturday(today)
+  const needWeekly = !hasOpenWeekly && dayOfWeek(today) !== 6
 
   async function handleSubmit() {
     const validTasks = tasks.filter(t => t.task.trim())
@@ -543,15 +564,15 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
     if (validTasks.some(t => !(t.what_changed || '').trim())) {
       showError('Fill in "What changed since yesterday?" for every task.'); return
     }
-    if (openFollowUps.length > 0) {
-      showError('Close out your open commitments above before submitting.'); return
+    if (openDailyFollowUps.length > 0) {
+      showError('Close out your open daily commitments above before submitting.'); return
     }
     const validPromises = promises.filter(p => p.text.trim())
-    if (!editMode && validPromises.length === 0) {
+    if (!editMode && validPromises.length === 0 && !hasNextDayDaily) {
       showError("Add at least one commitment for tomorrow — what will you accomplish?"); return
     }
     if (!editMode && needWeekly && !weeklyPromise.trim()) {
-      showError('This is your first update of the week — add your weekly commitment.'); return
+      showError('You have no active weekly commitment — add one for this week.'); return
     }
 
     setSubmitting(true); setError('')
@@ -632,7 +653,7 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
   const hasSubmitted = !!todayEntry && !editMode
   const myProj = projects.filter(p => p.status === 'active' && (p.members?.includes(session.id) || p.lead === session.id))
   const otherProj = projects.filter(p => p.status === 'active' && !p.members?.includes(session.id) && p.lead !== session.id)
-  const tomorrowsPromises = commitments.filter(c => c.status === 'open' && c.due_date > today)
+  const tomorrowsPromises = commitments.filter(c => c.status === 'open' && c.horizon === 'day' && c.due_date > today)
 
   return (
     <div style={{ minHeight: '100vh', fontFamily: FONT }}>
@@ -696,6 +717,19 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
         ) : (
           /* ── MY UPDATE TAB ── */
           <div>
+            {/* Persistent weekly commitment reminder — shown every day (non-blocking)
+                until Completed. Carry Forward rolls it to next week's Saturday. */}
+            {hasOpenWeekly && !absentMode && (
+              <FollowUpCard
+                promises={openWeekly}
+                projects={projects}
+                onResolve={resolvePromise}
+                title="Your weekly commitment"
+                subtitle="A reminder that stays until you complete it. Update it whenever you make progress — this never blocks your daily update."
+                accent="#4b3e9d"
+              />
+            )}
+
             {/* Not working today? — self-service absence */}
             {!hasSubmitted && !editMode && (
               absentMode ? (
@@ -735,9 +769,15 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
               )
             )}
 
-            {/* Step 1: follow-up on open promises */}
-            {!hasSubmitted && !absentMode && openFollowUps.length > 0 && (
-              <FollowUpCard promises={openFollowUps} projects={projects} onResolve={resolvePromise} />
+            {/* Step 1: follow-up on open daily commitments (must be resolved to submit) */}
+            {!hasSubmitted && !absentMode && openDailyFollowUps.length > 0 && (
+              <FollowUpCard
+                promises={openDailyFollowUps}
+                projects={projects}
+                onResolve={resolvePromise}
+                title="Step 1 · Follow up on your commitments"
+                subtitle="Close these out before submitting today's update."
+              />
             )}
 
             {/* Submitted state */}
@@ -805,7 +845,7 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
               <div style={{ ...CARD, padding: 24 }}>
                 <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', letterSpacing: '-0.02em' }}>
                   <div>
-                    <span>{editMode ? "Update Today's Work" : `Step ${openFollowUps.length > 0 ? '2' : '1'} · Today's Work`}</span>
+                    <span>{editMode ? "Update Today's Work" : `Step ${openDailyFollowUps.length > 0 ? '2' : '1'} · Today's Work`}</span>
                     <div style={{ fontSize: 13, fontWeight: 400, color: '#AEAEB2', marginTop: 2 }}>{FMT_DATE(today)}</div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -999,12 +1039,14 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
                   <div style={{ marginBottom: 20, background: 'rgba(75,62,157,0.04)', border: '1px solid rgba(75,62,157,0.18)', borderRadius: 12, padding: '16px 16px 12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 2, flexWrap: 'wrap' }}>
                       <div style={{ fontWeight: 700, fontSize: 14, letterSpacing: '-0.01em', color: '#2b2f6b' }}>
-                        Step {openFollowUps.length > 0 ? '3' : '2'} · Commit
+                        Step {openDailyFollowUps.length > 0 ? '3' : '2'} · Commit
                       </div>
                       <span style={DUE_PILL}>Due {fmtDue(nextDay)}</span>
                     </div>
                     <div style={{ fontSize: 12, color: '#6E6E73', marginBottom: 12 }}>
-                      What will you accomplish by <strong>{fmtDue(nextDay)}</strong>? (your next working day — followed up then)
+                      {hasNextDayDaily
+                        ? <>You&apos;ve carried a task to <strong>{fmtDue(nextDay)}</strong> — a new commitment is optional. Add another if you like.</>
+                        : <>What will you accomplish by <strong>{fmtDue(nextDay)}</strong>? (your next working day — followed up then)</>}
                     </div>
                     {promises.map((p, idx) => {
                       const proj = projects.find(pr => pr.id === p.project_id)
@@ -1042,7 +1084,7 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
                       <div style={{ marginTop: 4 }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
                           <div style={{ fontSize: 12, fontWeight: 600, color: '#4b3e9d' }}>
-                            First update this week — what will you accomplish by <strong>{fmtDue(thisWeekSat)}</strong>?
+                            Weekly commitment — what will you accomplish by <strong>{fmtDue(thisWeekSat)}</strong>?
                           </div>
                           <span style={DUE_PILL}>Due {fmtDue(thisWeekSat)}</span>
                         </div>

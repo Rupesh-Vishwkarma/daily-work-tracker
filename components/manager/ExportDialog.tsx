@@ -74,7 +74,7 @@ function buildCSV(data: ExportData, opts: Options, periodFrom: string, periodTo:
     'Employee', 'Working Days', 'Days Submitted', 'Submission Rate %', 'Absent Days',
     'Total Hours', 'Tasks Logged', 'Tasks Completed', 'Completion Rate %',
     'Heavy Days', 'Medium Days', 'Light Days', 'Blocked Tasks',
-    'Commitments', 'Met', 'Missed', 'Partial', 'Open', 'Reliability %',
+    'Commitments', 'Completed', 'On-time', 'In Progress', 'On-time %',
   ]))
   for (const id of empIds) {
     const emp = entries.filter(e => e.employee_id === id)
@@ -98,18 +98,17 @@ function buildCSV(data: ExportData, opts: Options, periodFrom: string, periodTo:
     const light = present.filter(e => e.workload === 'light').length
 
     const cm = commitments.filter(c => c.employee_id === id)
-    const met = cm.filter(c => c.status === 'done').length
-    const missed = cm.filter(c => c.status === 'missed').length
-    const partial = cm.filter(c => c.status === 'partial').length
+    const completedCm = cm.filter(c => c.status === 'done')
+    const met = completedCm.length
+    const onTime = completedCm.filter(c => (c.carry_count || 0) === 0).length
     const open = cm.filter(c => c.status === 'open').length
-    const resolved = met + missed + partial
-    const reliability = resolved > 0 ? Math.round((met / resolved) * 100) : ''
+    const reliability = met > 0 ? Math.round((onTime / met) * 100) : ''
 
     lines.push(row([
       empName(id), workingDays, daysSubmitted, submissionRate, absentDays,
       totalHours, statused.length, completed, completionRate,
       heavy, medium, light, blocked,
-      cm.length, met, missed, partial, open, reliability,
+      cm.length, met, onTime, open, reliability,
     ]))
   }
   lines.push('')

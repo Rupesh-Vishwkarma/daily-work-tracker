@@ -123,7 +123,7 @@ All routes sit behind `proxy.ts`. "any (scoped)" = authenticated; employees are 
 | `/api/auth/login` | POST | public | Manager (Supabase Auth) or employee (table) login; sets signed cookie |
 | `/api/auth/logout` | POST | any | Clear cookie |
 | `/api/entries` | GET/POST/PATCH/DELETE | GET/POST/PATCH any (scoped); DELETE manager | Entries CRUD; employees scoped to own; **edit-until-EOD** lock; commitment gate on POST |
-| `/api/commitments` | GET/POST/PATCH/DELETE | GET/POST/PATCH any (scoped); DELETE manager | Commitments loop; auto-carry on GET; resolve/carry on PATCH |
+| `/api/commitments` | GET/POST/PATCH/DELETE | GET/POST/PATCH any (scoped); DELETE manager | Commitments loop; daily-only auto-carry on GET; resolve (done) / horizon-aware carry on PATCH |
 | `/api/attachments` | POST | any (scoped) | Upload screenshot/file to Storage (≤2 MB, allowlisted types); returns public URL |
 | `/api/projects` | GET any; POST/PATCH/DELETE manager | Projects CRUD |
 | `/api/employees` | all manager | Roster + password management; GET **excludes** password column |
@@ -148,17 +148,19 @@ All routes sit behind `proxy.ts`. "any (scoped)" = authenticated; employees are 
 
 Accountability comes from comparing what a member *promised* to what they *delivered*. The employee's daily flow is three steps.
 
-**Step 1 — Follow up.** The app surfaces yesterday's (and earlier) open commitments due today or earlier. The employee marks each **Done / Partial / Missed**, or **Carry to next day** (daily only), with an optional outcome note. Submitting the day's update is **blocked** (client + server) until due commitments are resolved.
+**Step 1 — Follow up (daily).** The app surfaces open **daily** commitments due today or earlier. The employee marks each **Completed / Partial / Carry Forward**, with an optional outcome note. **Completed** closes the commitment; **Partial** (some progress) and **Carry Forward** (none) both keep it open and roll it to the next working day. There is **no "Missed"** outcome. Submitting the day's update is **blocked** (client + server) until due **daily** commitments are resolved. If a daily task is Partial/Carry Forward, the carried copy becomes the next day's goal, so **a new daily commitment is optional** that day.
 
 **Step 2 — Log.** Enter today's work as task rows (§7.1).
 
-**Step 3 — Commit.** Required on new submissions: at least one **daily** commitment ("what will you accomplish by the next working day?"), each linked to a project or tagged Other Work. On the **first login/submission of the week**, a **weekly** commitment (due that week's Saturday) is also required. Each commitment's exact due date is shown to the employee (a "Due «Weekday, DD Mon»" pill). The week runs **Sun–Sat**; the weekly commitment is due the current week's Saturday. If the employee's first login of the week is Saturday itself, the weekly commitment is **skipped** for that week (no room left to deliver).
+**Step 3 — Commit.** Daily: at least one **daily** commitment ("what will you accomplish by the next working day?"), each linked to a project or tagged Other Work — unless one is already carried to the next day (then optional). Weekly: the rule is **always have exactly one open weekly commitment**. A new weekly (due that week's Saturday) is **mandatory when none is open** — the first login of the week, or right after completing one mid-week — and **non-mandatory while a carried weekly is still open**. It is **skipped** if the first login of the week is Saturday with nothing open. Each commitment's exact due date is shown (a "Due «Weekday, DD Mon»" pill).
+
+**Weekly carry & persistent reminder.** On Saturday the weekly is resolved **Completed / Partial / Carry Forward**. Partial/Carry Forward roll it to **next week's Saturday** and keep it open. A carried/open weekly is shown **every day as a non-blocking reminder** (it never blocks the daily update) and can be marked Completed on any day. When completed mid-week, a new weekly for the current week's Saturday becomes mandatory again; once Completed it disappears.
 
 **Rules & signals:**
 - The week runs **Sun–Sat** with **Mon–Sat working days** (Sunday is non-working; employees do not submit on Sunday). Follow-up is weekend-aware (`nextWorkingDay` skips Sunday), so Saturday's daily promise is followed up Monday.
 - **Weekly summary (planned):** each week's Mon–Sat work is aggregated into a single combined team summary sent to the manager the following Sunday (see §13, Phase 3).
-- **Auto-carry:** on GET, open commitments past their due date roll forward to today, with `carry_count` incremented by the number of working days missed (so ignoring a promise for 3 days shows "carried ×3").
-- **Commitment Reliability %** = delivered (done) ÷ resolved, per employee per period — a headline manager metric shown to both manager (Commitments tab) and employee (My Stats).
+- **Auto-carry (daily only):** on GET, open **daily** commitments past their due date roll forward to today, with `carry_count` incremented by the number of working days missed (so ignoring a promise for 3 days shows "carried ×3"). Weekly commitments are **not** auto-carried — they stay open as a persistent reminder and roll only via explicit Carry Forward.
+- **On-time Delivery %** = completed **without ever carrying** (`carry_count === 0`) ÷ total completed, per employee per period — the headline metric shown to both manager (Commitments tab) and employee (My Stats). Open/carried commitments are excluded until completed.
 - A commitment **carried 3+ times** is escalated on the manager's Commitments tab as **stalled work**.
 - **Server enforcement:** POST `/api/commitments` validates required fields, horizon, and scopes `employee_id` to the caller; PATCH enforces ownership and valid action/status; DELETE is manager-only.
 
@@ -171,7 +173,7 @@ Accountability comes from comparing what a member *promised* to what they *deliv
 - **FR-E2:** Status indicator circle per task: in-progress = navy ring, completed = solid green ✓, blocked = solid red !.
 - **FR-E3:** Attachments per task — **screenshot/image** and **file** upload (client-compressed, ≤2 MB, allowlisted types) and **inline link** entry. Attachments open in a single new tab.
 - **FR-E4:** Overall workload selector (light / medium / heavy).
-- **FR-E5:** Submit validation: ≥1 task with a title; "what changed" filled for every task; due commitments resolved; ≥1 daily commitment; weekly commitment on first update of the week.
+- **FR-E5:** Submit validation: ≥1 task with a title; "what changed" filled for every task; due daily commitments resolved; ≥1 daily commitment (unless one is already carried to the next day); weekly commitment whenever no open weekly exists (and not a Saturday first-login).
 
 ### 7.2 Edit & lock
 - **FR-E6:** One update per day; **editable until end of the IST day, then locked** (server rejects edits when `entry.date !== todayIST()`).
@@ -181,7 +183,7 @@ Accountability comes from comparing what a member *promised* to what they *deliv
 
 ### 7.3 Views
 - **FR-E10:** Submitted-state confirmation card; today's tasks; manager notes on entries; open commitments list.
-- **FR-E11:** "My Stats" — Commitment Reliability %, total updates, completion rate, hours logged, commitment outcomes, workload distribution, task outcomes, project breakdown (30-day window).
+- **FR-E11:** "My Stats" — On-time Delivery %, total updates, completion rate, hours logged, commitment outcomes (Completed / On-time / In progress), workload distribution, task outcomes, project breakdown (30-day window).
 - **FR-E12:** Recent history (last 5 non-today entries) with manager notes; absent days shown explicitly.
 - **FR-E13:** Active broadcast banner (dismissible).
 
@@ -198,7 +200,7 @@ Accountability comes from comparing what a member *promised* to what they *deliv
 - **FR-M6:** Filter by employee name.
 
 ### 8.2 Commitments
-- **FR-C1:** Team stat cards — Team Reliability %, Commitments Made, Delivered, Due/Overdue, Stalled (3+ carries).
+- **FR-C1:** Team stat cards — On-time Delivery %, Commitments Made, Completed, Due/Overdue, Stalled (3+ carries).
 - **FR-C2:** Stalled-work escalation list (committed ≥3 times without delivery).
 - **FR-C3:** Per-member reliability, promised/delivered/open counts, expandable commitment history with outcome notes; period selector (7/30/90 days).
 
@@ -307,6 +309,14 @@ Chronological. Tags: `v1.0.0`, `v2.0.0`, `v4.0.0`, `v4.1`, `v5`, `v6`.
 - **Saturday-first-login skips the weekly commitment.** If an employee's first login of the week is Saturday, the weekly commitment is skipped for that week (no room left to deliver). Removed the previous "Saturday targets next week's Saturday" behavior. Client-only change; no schema impact.
 - **Planned:** each week's Mon–Sat work aggregated into a single **combined team summary** emailed to the manager the following Sunday (see §13, Phase 3).
 
+### Post-v6 — carry-forward commitment tracking workflow
+- **Outcomes simplified to Completed / Partial / Carry Forward; "Missed" removed.** Completed closes a commitment; Partial (some progress) and Carry Forward (none) both keep it open and roll it forward (`carry_count++`). The Partial vs Carry distinction is recorded in the outcome note. No schema change (statuses now written are only `open`/`done`; `partial`/`missed` remain accepted for legacy rows).
+- **Daily:** a carried/partial daily task becomes the next day's goal, so a **new daily commitment is optional** that day. Daily follow-up still **blocks** submission (client + server).
+- **Weekly = always one open weekly.** A new weekly is mandatory only when none is open (first login of week, or after completing one mid-week → targets the current week's Saturday); non-mandatory while a carried weekly is open. Carry Forward rolls the weekly to **next week's Saturday** (`nextWeekSaturday` helper).
+- **Persistent weekly reminder.** An open/carried weekly is shown **every day** as a **non-blocking** card and can be Completed any day. Weekly commitments are **excluded from the daily auto-carry** and from the submit-blocking gate (client + server).
+- **Reliability redefined to On-time Delivery %** = completed with `carry_count === 0` ÷ total completed. Applied to My Stats, manager Commitments tab (cards + per-member + stalled), and the CSV export summary (columns: Completed / On-time / In Progress / On-time %). Open/carried items excluded until completed.
+- **Files:** `lib/dates.ts` (`nextWeekSaturday`), `api/commitments` (horizon-aware carry + daily-only auto-carry), `api/entries` (daily-only submit gate), `components/EmployeePage.tsx` (generalized `FollowUpCard`, weekly reminder, new mandatory/optional rules, metrics), `components/manager/CommitmentsTab.tsx`, `components/manager/ExportDialog.tsx`. No DB migration required.
+
 ---
 
 ## 11. Non-functional characteristics (current)
@@ -369,7 +379,7 @@ Derived from surveying async check-in tools (Geekbot, DailyBot, Standuply, Range
 
 - Daily submission rate (% of team submitting each **Mon–Sat** working day) ≥ 90%.
 - Median time to submit an update < 60s.
-- Commitment Reliability % trending up; stalled (3+ carry) count trending down.
+- On-time Delivery % trending up; stalled (3+ carry) count trending down.
 - Manager same-day review of ≥ 80% of entries.
 - Blocker resolution time (median age at resolve) trending down.
 - Zero plaintext-credential exposure to clients (achieved: passwords no longer returned/displayed; hashing still pending).

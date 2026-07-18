@@ -69,6 +69,9 @@ export async function POST(req: NextRequest) {
       .select('id')
       .eq('employee_id', employee_id)
       .eq('status', 'open')
+      // Only daily commitments block submission. Weekly commitments are a
+      // persistent, non-blocking reminder resolved on their own cadence.
+      .eq('horizon', 'day')
       .lte('due_date', todayIST())
       .limit(1)
     if (openDue && openDue.length > 0) {

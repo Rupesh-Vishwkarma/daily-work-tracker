@@ -64,6 +64,14 @@ export function weekSaturday(s: string): string {
   return toStr(d)
 }
 
+/** Saturday of the week AFTER the one containing the given date — where a
+ *  carried-forward weekly commitment rolls to. */
+export function nextWeekSaturday(s: string): string {
+  const d = toDate(weekSaturday(s))
+  d.setUTCDate(d.getUTCDate() + 7)
+  return toStr(d)
+}
+
 /** Monday of the week containing the given date. */
 export function weekMonday(s: string): string {
   const d = toDate(s)

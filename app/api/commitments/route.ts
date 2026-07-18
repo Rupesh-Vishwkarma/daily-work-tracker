@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { todayIST, nextWorkingDay, workingDaysBetween } from '@/lib/dates'
+import { todayIST, nextWorkingDay, nextWeekSaturday, workingDaysBetween } from '@/lib/dates'
 
 const HORIZONS = ['day', 'week']
+// Completed is the only closing outcome now; Partial / Carry Forward both roll a
+// task forward via the 'carry' action (kept 'partial'/'missed' accepted for old rows).
 const RESOLVE_STATUSES = ['done', 'partial', 'missed']
 
 export async function GET(req: NextRequest) {
@@ -25,6 +27,9 @@ export async function GET(req: NextRequest) {
       .select('id, carry_count, due_date')
       .eq('employee_id', employeeId)
       .eq('status', 'open')
+      // Only daily commitments auto-carry. Weekly commitments are resolved
+      // explicitly and stay visible as a persistent, non-blocking reminder.
+      .eq('horizon', 'day')
       .lt('due_date', today)
     if (overdue && overdue.length > 0) {
       // One carry per missed working day, so a promise ignored for three
@@ -108,7 +113,7 @@ export async function PATCH(req: NextRequest) {
 
   const admin = supabaseAdmin()
   const { data: existing } = await admin.from('commitments')
-    .select('employee_id, status, carry_count, due_date').eq('id', id).single()
+    .select('employee_id, status, carry_count, due_date, horizon').eq('id', id).single()
   if (!existing) return NextResponse.json({ error: 'Commitment not found' }, { status: 404 })
   if (role !== 'manager' && existing.employee_id !== userId) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -119,9 +124,11 @@ export async function PATCH(req: NextRequest) {
     if (existing.status !== 'open') {
       return NextResponse.json({ error: 'Only open commitments can be carried' }, { status: 400 })
     }
+    // Daily rolls to the next working day; weekly rolls to next week's Saturday.
+    const newDue = existing.horizon === 'week' ? nextWeekSaturday(todayIST()) : nextWorkingDay(todayIST())
     updates = {
       carry_count: (existing.carry_count || 0) + 1,
-      due_date: nextWorkingDay(todayIST()),
+      due_date: newDue,
       outcome_note: outcome_note ? String(outcome_note).slice(0, 2000) : null,
     }
   } else if (RESOLVE_STATUSES.includes(status)) {

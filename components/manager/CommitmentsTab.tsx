@@ -5,11 +5,13 @@ import { FONT, CARD, fmtDate } from '@/lib/ui'
 import { todayIST } from '@/lib/dates'
 import { useNudge } from '@/lib/realtime'
 
+// 'open' commitments are in progress (possibly carried); 'done' is completed.
+// 'partial'/'missed' remain only so any pre-existing rows still render.
 const OUTCOME: Record<string, { label: string; color: string }> = {
-  open:    { label: 'Open',    color: '#33398a' },
-  done:    { label: 'Done',    color: '#34C759' },
-  partial: { label: 'Partial', color: '#FF9500' },
-  missed:  { label: 'Missed',  color: '#FF3B30' },
+  open:    { label: 'In progress', color: '#33398a' },
+  done:    { label: 'Completed',   color: '#34C759' },
+  partial: { label: 'Partial',     color: '#FF9500' },
+  missed:  { label: 'Missed',      color: '#FF3B30' },
 }
 
 const PERIODS = [
@@ -22,8 +24,6 @@ interface MemberStats {
   employee: Employee
   promised: number
   delivered: number
-  partial: number
-  missed: number
   open: number
   reliability: number | null
   stalled: Commitment[]
@@ -59,26 +59,26 @@ export default function CommitmentsTab() {
 
   const today = todayIST()
 
+  // On-time delivery = completed without ever carrying forward. Open (carried)
+  // commitments are still in flight and excluded until completed.
   const memberStats: MemberStats[] = employees.map(emp => {
     const mine = commitments.filter(c => c.employee_id === emp.id)
-    const resolved = mine.filter(c => c.status !== 'open')
-    const delivered = resolved.filter(c => c.status === 'done').length
+    const completed = mine.filter(c => c.status === 'done')
+    const onTime = completed.filter(c => (c.carry_count || 0) === 0).length
     return {
       employee: emp,
       promised: mine.length,
-      delivered,
-      partial: resolved.filter(c => c.status === 'partial').length,
-      missed: resolved.filter(c => c.status === 'missed').length,
+      delivered: completed.length,
       open: mine.filter(c => c.status === 'open').length,
-      reliability: resolved.length ? Math.round(delivered / resolved.length * 100) : null,
+      reliability: completed.length ? Math.round(onTime / completed.length * 100) : null,
       stalled: mine.filter(c => c.status === 'open' && c.carry_count >= 3),
     }
   }).sort((a, b) => (a.reliability ?? 101) - (b.reliability ?? 101))
 
   const allStalled = memberStats.flatMap(m => m.stalled)
-  const resolvedAll = commitments.filter(c => c.status !== 'open')
-  const teamReliability = resolvedAll.length
-    ? Math.round(resolvedAll.filter(c => c.status === 'done').length / resolvedAll.length * 100)
+  const completedAll = commitments.filter(c => c.status === 'done')
+  const teamReliability = completedAll.length
+    ? Math.round(completedAll.filter(c => (c.carry_count || 0) === 0).length / completedAll.length * 100)
     : null
   const openOverdue = commitments.filter(c => c.status === 'open' && c.due_date <= today).length
 
@@ -104,9 +104,9 @@ export default function CommitmentsTab() {
       {/* Team stat cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 10, marginBottom: 16 }}>
         {[
-          { v: teamReliability !== null ? teamReliability + '%' : '—', l: 'Team Reliability', c: '#4b3e9d' },
+          { v: teamReliability !== null ? teamReliability + '%' : '—', l: 'On-time Delivery', c: '#4b3e9d' },
           { v: commitments.length, l: 'Commitments Made', c: '#33398a' },
-          { v: resolvedAll.filter(c => c.status === 'done').length, l: 'Delivered', c: '#34C759' },
+          { v: completedAll.length, l: 'Completed', c: '#34C759' },
           { v: openOverdue, l: 'Due / Overdue', c: '#FF9500' },
           { v: allStalled.length, l: 'Stalled (3+ carries)', c: '#FF3B30' },
         ].map(s => (
@@ -147,7 +147,7 @@ export default function CommitmentsTab() {
               <div style={{ flex: 1, minWidth: 140 }}>
                 <div style={{ fontWeight: 600, fontSize: 15, color: '#1D1D1F', fontFamily: FONT }}>{m.employee.name}</div>
                 <div style={{ fontSize: 12, color: '#AEAEB2', fontFamily: FONT }}>
-                  {m.promised} committed · {m.delivered} delivered · {m.open} open
+                  {m.promised} committed · {m.delivered} completed · {m.open} in progress
                 </div>
               </div>
               {m.stalled.length > 0 && (
@@ -159,7 +159,7 @@ export default function CommitmentsTab() {
                 <div style={{ fontWeight: 700, fontSize: 20, fontFamily: FONT, letterSpacing: '-0.02em', color: m.reliability === null ? '#AEAEB2' : m.reliability >= 75 ? '#34C759' : m.reliability >= 50 ? '#FF9500' : '#FF3B30' }}>
                   {m.reliability !== null ? m.reliability + '%' : '—'}
                 </div>
-                <div style={{ fontSize: 10, color: '#AEAEB2', fontFamily: FONT, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Reliability</div>
+                <div style={{ fontSize: 10, color: '#AEAEB2', fontFamily: FONT, textTransform: 'uppercase', letterSpacing: '0.05em' }}>On-time</div>
               </div>
               <span style={{ color: '#AEAEB2', fontSize: 14 }}>{isOpen ? '▾' : '▸'}</span>
             </div>
