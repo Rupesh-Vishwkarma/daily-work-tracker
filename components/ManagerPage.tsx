@@ -7,9 +7,10 @@ import CommitmentsTab from './manager/CommitmentsTab'
 import BlockersTab from './manager/BlockersTab'
 import ProjectsTab from './manager/ProjectsTab'
 import HistoryTab from './manager/HistoryTab'
+import WeeklyReportTab from './manager/WeeklyReportTab'
 import SettingsTab from './manager/SettingsTab'
 
-type Tab = 'today' | 'commitments' | 'blockers' | 'projects' | 'history' | 'settings'
+type Tab = 'today' | 'commitments' | 'blockers' | 'projects' | 'history' | 'weekly' | 'settings'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'today', label: 'Today' },
@@ -17,6 +18,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'blockers', label: 'Blockers' },
   { id: 'projects', label: 'Projects' },
   { id: 'history', label: 'History' },
+  { id: 'weekly', label: 'Weekly Report' },
   { id: 'settings', label: 'Settings' },
 ]
 
@@ -60,6 +62,7 @@ export default function ManagerPage({ session, onLogout }: { session: Session; o
         {tab === 'blockers' && <BlockersTab />}
         {tab === 'projects' && <ProjectsTab />}
         {tab === 'history' && <HistoryTab />}
+        {tab === 'weekly' && <WeeklyReportTab />}
         {tab === 'settings' && <SettingsTab />}
       </div>
     </div>

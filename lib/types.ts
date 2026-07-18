@@ -97,3 +97,65 @@ export interface Session {
   name: string
   role: Role
 }
+
+// ---- Weekly summary (spec: docs/superpowers/specs/2026-07-18-weekly-summary-email-design.md) ----
+
+export interface ProjectWork {
+  project_name: string
+  tasks: { title: string; what_changed: string; status: TaskStatus }[]
+  blockers: string[]
+}
+
+export interface EmployeeBrief {
+  employee_id: string
+  employee_name: string
+  days_submitted: number
+  absences: number
+  tasks_completed: number
+  tasks_in_progress: number
+  tasks_blocked: number
+  commitments_delivered: number
+  commitments_carried: number
+  weekly_commitment_outcome: 'completed' | 'carried' | 'none'
+  projects: ProjectWork[]
+}
+
+export interface AttentionItem {
+  kind: 'stalled' | 'blocker' | 'missed_days' | 'zero_activity'
+  employee_name: string
+  detail: string
+}
+
+export interface TeamStats {
+  working_days: number
+  members: number
+  submission_rate: number            // 0–100
+  commitments_completed: number
+  commitments_carried: number
+  on_time_delivery_pct: number | null // null when nothing completed
+  open_blockers: number
+}
+
+export interface WeeklySummaryPayload {
+  week_start: string
+  week_end: string
+  team: TeamStats
+  attention: AttentionItem[]
+  employees: EmployeeBrief[]
+}
+
+/** The ONLY shape ever sent to Gemini. Rebuilt key-by-key in toAiInput() (spec §4a). */
+export type AiInput = WeeklySummaryPayload
+
+export interface WeeklySummary {
+  id: string
+  week_start: string
+  week_end: string
+  payload: WeeklySummaryPayload
+  narrative: string | null
+  generated_at: string
+  sent_at: string | null
+  sent_to: string[] | null
+  send_error: string | null
+  created_at: string
+}

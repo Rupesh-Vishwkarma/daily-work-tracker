@@ -12,6 +12,7 @@ const MANAGER_ONLY: { prefix: string; methods: string[] }[] = [
   { prefix: '/api/export', methods: ['GET'] },
   { prefix: '/api/entries', methods: ['DELETE'] },
   { prefix: '/api/commitments', methods: ['DELETE'] },
+  { prefix: '/api/weekly-summary', methods: ['GET', 'POST'] },
 ]
 
 export async function proxy(req: NextRequest) {
@@ -19,6 +20,9 @@ export async function proxy(req: NextRequest) {
     const { pathname } = req.nextUrl
 
     if (pathname.startsWith('/api/auth/')) return NextResponse.next()
+
+    // Cron routes authenticate themselves via CRON_SECRET (no session cookie).
+    if (pathname.startsWith('/api/cron/')) return NextResponse.next()
 
     const session = await verifySession(req.cookies.get(COOKIE_NAME)?.value)
     if (!session) {
