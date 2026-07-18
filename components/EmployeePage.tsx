@@ -28,6 +28,18 @@ const OUTCOME: Record<string, { label: string; color: string }> = {
 // Small uppercase field label used across the task form.
 const LBL = { display: 'block', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' as const, color: '#8a90a2', marginBottom: 5 }
 
+// Due date with weekday so the exact day is unambiguous — e.g. "Thu, 16 Jul".
+function fmtDue(s: string) {
+  return new Date(s + 'T12:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' })
+}
+
+// "Due <date>" pill shown next to each commitment so employees see the exact deadline.
+const DUE_PILL = {
+  display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px',
+  borderRadius: 980, fontSize: 11.5, fontWeight: 700, fontFamily: FONT,
+  background: 'rgba(75,62,157,0.1)', color: '#4b3e9d', whiteSpace: 'nowrap' as const,
+}
+
 // Consistent pill "chip" for the task action bar (blocker / screenshot / link).
 const CHIP = {
   display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px',
@@ -515,11 +527,14 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
 
   // Step 1 gate: open promises due today or earlier must be resolved first.
   const openFollowUps = commitments.filter(c => c.status === 'open' && c.due_date <= today)
-  // Weekly promise needed if none exists for this week yet (first submission of the week).
-  // On Saturday itself, a new weekly commitment targets NEXT week's Saturday —
-  // otherwise it would be due the same day it was made.
-  const thisWeekSat = dayOfWeek(today) === 6 ? weekSaturday(nextWorkingDay(today)) : weekSaturday(today)
-  const needWeekly = !commitments.some(c => c.horizon === 'week' && c.due_date === thisWeekSat)
+  // The week runs Sun–Sat. Sunday is a non-working day, so the first login of the
+  // week is normally Monday. The weekly commitment is shown on that first login
+  // and is due that week's Saturday. If the employee's first login of the week is
+  // Saturday (i.e. no weekly commitment exists yet by the last working day), we
+  // skip the weekly commitment entirely for that week — there is no room left to
+  // deliver on it.
+  const thisWeekSat = weekSaturday(today)
+  const needWeekly = dayOfWeek(today) !== 6 && !commitments.some(c => c.horizon === 'week' && c.due_date === thisWeekSat)
   const nextDay = nextWorkingDay(today)
 
   async function handleSubmit() {
@@ -982,11 +997,14 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
                 {/* Step 3: Commit — promises for tomorrow (new submissions only) */}
                 {!editMode && (
                   <div style={{ marginBottom: 20, background: 'rgba(75,62,157,0.04)', border: '1px solid rgba(75,62,157,0.18)', borderRadius: 12, padding: '16px 16px 12px' }}>
-                    <div style={{ fontWeight: 700, fontSize: 14, letterSpacing: '-0.01em', marginBottom: 2, color: '#2b2f6b' }}>
-                      Step {openFollowUps.length > 0 ? '3' : '2'} · Commit
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 2, flexWrap: 'wrap' }}>
+                      <div style={{ fontWeight: 700, fontSize: 14, letterSpacing: '-0.01em', color: '#2b2f6b' }}>
+                        Step {openFollowUps.length > 0 ? '3' : '2'} · Commit
+                      </div>
+                      <span style={DUE_PILL}>Due {fmtDue(nextDay)}</span>
                     </div>
                     <div style={{ fontSize: 12, color: '#6E6E73', marginBottom: 12 }}>
-                      What will you accomplish by <strong>{FMT_DATE(nextDay)}</strong>? (followed up next working day)
+                      What will you accomplish by <strong>{fmtDue(nextDay)}</strong>? (your next working day — followed up then)
                     </div>
                     {promises.map((p, idx) => {
                       const proj = projects.find(pr => pr.id === p.project_id)
@@ -1022,8 +1040,11 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
 
                     {needWeekly && (
                       <div style={{ marginTop: 4 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: '#4b3e9d', marginBottom: 6 }}>
-                          First update this week — what will you accomplish by Saturday?
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: '#4b3e9d' }}>
+                            First update this week — what will you accomplish by <strong>{fmtDue(thisWeekSat)}</strong>?
+                          </div>
+                          <span style={DUE_PILL}>Due {fmtDue(thisWeekSat)}</span>
                         </div>
                         <textarea
                           value={weeklyPromise}

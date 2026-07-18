@@ -152,10 +152,11 @@ Accountability comes from comparing what a member *promised* to what they *deliv
 
 **Step 2 — Log.** Enter today's work as task rows (§7.1).
 
-**Step 3 — Commit.** Required on new submissions: at least one **daily** commitment ("what will you accomplish by the next working day?"), each linked to a project or tagged Other Work. On the **first submission of the week**, a **weekly** commitment (due that week's Saturday) is also required. On Saturday, a new weekly commitment targets *next* week's Saturday.
+**Step 3 — Commit.** Required on new submissions: at least one **daily** commitment ("what will you accomplish by the next working day?"), each linked to a project or tagged Other Work. On the **first login/submission of the week**, a **weekly** commitment (due that week's Saturday) is also required. Each commitment's exact due date is shown to the employee (a "Due «Weekday, DD Mon»" pill). The week runs **Sun–Sat**; the weekly commitment is due the current week's Saturday. If the employee's first login of the week is Saturday itself, the weekly commitment is **skipped** for that week (no room left to deliver).
 
 **Rules & signals:**
-- Working week is **Mon–Sat**; follow-up is weekend-aware (`nextWorkingDay` skips Sunday). Saturday's daily promise is followed up Monday.
+- The week runs **Sun–Sat** with **Mon–Sat working days** (Sunday is non-working; employees do not submit on Sunday). Follow-up is weekend-aware (`nextWorkingDay` skips Sunday), so Saturday's daily promise is followed up Monday.
+- **Weekly summary (planned):** each week's Mon–Sat work is aggregated into a single combined team summary sent to the manager the following Sunday (see §13, Phase 3).
 - **Auto-carry:** on GET, open commitments past their due date roll forward to today, with `carry_count` incremented by the number of working days missed (so ignoring a promise for 3 days shows "carried ×3").
 - **Commitment Reliability %** = delivered (done) ÷ resolved, per employee per period — a headline manager metric shown to both manager (Commitments tab) and employee (My Stats).
 - A commitment **carried 3+ times** is escalated on the manager's Commitments tab as **stalled work**.
@@ -299,6 +300,12 @@ Chronological. Tags: `v1.0.0`, `v2.0.0`, `v4.0.0`, `v4.1`, `v5`, `v6`.
 - Action chips (Blocker / Screenshot / Link) restyled as consistent pills; inline link input replaced `window.prompt`.
 - Console-error fixes: split CSS `background`/`border` shorthands into longhand on `<select>`/chip elements; single-tab attachment opening via `window.open` with event guards.
 - `ManagerPage` font switched from the legacy Apple stack to brand Manrope.
+
+### Post-v6 — commitment due-date visibility & Sun–Sat week
+- **Explicit due dates on commitments.** When committing, employees now see the exact deadline for each commitment as a "Due «Weekday, DD Mon»" pill — the daily commitment's next-working-day date and the weekly commitment's Saturday date.
+- **Week defined as Sun–Sat** (with Mon–Sat working days; Sunday non-working). The weekly commitment appears on the **first login of the week** (normally Monday) and is due that week's Saturday.
+- **Saturday-first-login skips the weekly commitment.** If an employee's first login of the week is Saturday, the weekly commitment is skipped for that week (no room left to deliver). Removed the previous "Saturday targets next week's Saturday" behavior. Client-only change; no schema impact.
+- **Planned:** each week's Mon–Sat work aggregated into a single **combined team summary** emailed to the manager the following Sunday (see §13, Phase 3).
 
 ---
 
