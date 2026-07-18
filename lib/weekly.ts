@@ -1,6 +1,5 @@
 import { supabaseAdmin } from './supabase'
 import { summarize, weekBoundsFor, type RosterMember, type ProjectName } from './summary'
-import { generateNarrative } from './ai'
 import { sendWeeklyEmail, RECIPIENTS } from './email'
 import type { Entry, Commitment, WeeklySummary, WeeklySummaryPayload } from './types'
 
@@ -29,16 +28,15 @@ export async function generateWeeklySummary(weekStart: string, weekEnd: string, 
   )
 }
 
-/** Build payload + narrative and upsert the week's row (no email). Idempotent:
+/** Build the deterministic payload and upsert the week's row (no email). Idempotent:
  *  keyed on week_start, so regeneration updates in place. */
 export async function generateAndStore(targetDate: string): Promise<WeeklySummary> {
   const { weekStart, weekEnd, workingDays } = weekBoundsFor(targetDate)
   const payload = await generateWeeklySummary(weekStart, weekEnd, workingDays)
-  const narrative = await generateNarrative(payload)
   const admin = supabaseAdmin()
   const { data, error } = await admin.from('weekly_summaries')
     .upsert(
-      { week_start: weekStart, week_end: weekEnd, payload, narrative, generated_at: new Date().toISOString() },
+      { week_start: weekStart, week_end: weekEnd, payload, narrative: null, generated_at: new Date().toISOString() },
       { onConflict: 'week_start' },
     )
     .select().single()
@@ -55,7 +53,7 @@ export async function sendWeek(targetDate: string): Promise<WeeklySummary> {
     .select('*').eq('week_start', weekStart).maybeSingle()
   const row = (existing as WeeklySummary | null) ?? await generateAndStore(targetDate)
 
-  const result = await sendWeeklyEmail(row.payload, row.narrative)
+  const result = await sendWeeklyEmail(row.payload)
   const updates = result.ok
     ? { sent_at: new Date().toISOString(), sent_to: [RECIPIENTS.to, RECIPIENTS.cc], send_error: null }
     : { send_error: result.error }

@@ -132,12 +132,6 @@ export default function WeeklyReportTab() {
             {current.send_error && <span style={{ color: '#b3261e' }}> · Last send failed: {current.send_error}</span>}
           </div>
 
-          {current.narrative && (
-            <div style={{ ...CARD, padding: '16px 18px', marginTop: 12, borderLeft: `4px solid ${BRAND.navy}`, fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap', color: '#3a3a3c' }}>
-              {current.narrative}
-            </div>
-          )}
-
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
             <StatCard value={`${current.payload.team.submission_rate}%`} name="Submission rate" />
             <StatCard value={String(current.payload.team.commitments_completed)} name="Commitments done" />

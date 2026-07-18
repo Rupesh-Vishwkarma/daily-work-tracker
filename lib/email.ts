@@ -23,12 +23,11 @@ function statCell(label: string, value: string): string {
   </td><td style="width:8px;"></td>`
 }
 
-function attentionHtml(items: AttentionItem[], appUrl: string | undefined): string {
+function attentionHtml(items: AttentionItem[]): string {
   if (items.length === 0) return ''
   const rows = items.map(a =>
     `<li style="margin:6px 0;font-size:13px;color:#3a3a3c;">
       <strong>${escapeHtml(a.employee_name)}</strong>: ${escapeHtml(a.detail)}
-      ${appUrl ? ` — <a href="${appUrl}" style="color:${BRAND.navy};">review on the dashboard</a>` : ' — review on the dashboard'}
     </li>`).join('')
   return `<div style="margin:20px 0;padding:14px 18px;background:#fff8e6;border:1px solid ${BRAND.gold};border-radius:12px;">
     <div style="font-size:14px;font-weight:700;color:${BRAND.navyDark};">Needs attention</div>
@@ -60,15 +59,11 @@ function employeeHtml(e: EmployeeBrief, workingDays: number): string {
   </div>`
 }
 
-export function renderWeeklyEmail(payload: WeeklySummaryPayload, narrative: string | null): { subject: string; html: string } {
+export function renderWeeklyEmail(payload: WeeklySummaryPayload): { subject: string; html: string } {
   const appUrl = process.env.APP_URL
   const subject = `Weekly Team Summary — ${fmtDate(payload.week_start)} to ${fmtDate(payload.week_end)}`
   const t = payload.team
   const quiet = payload.employees.every(e => e.days_submitted === 0)
-
-  const narrativeBlock = narrative
-    ? `<div style="margin:20px 0;padding:16px 18px;background:#f6f7fb;border-left:4px solid ${BRAND.navy};border-radius:8px;font-size:13px;line-height:1.6;color:#3a3a3c;white-space:pre-wrap;">${escapeHtml(narrative)}</div>`
-    : ''
 
   const body = quiet
     ? `<p style="font-size:13px;color:#3a3a3c;">It was a quiet week — no updates were logged.</p>`
@@ -81,7 +76,6 @@ export function renderWeeklyEmail(payload: WeeklySummaryPayload, narrative: stri
       <div style="color:${BRAND.gold};font-size:13px;margin-top:4px;">${fmtDate(payload.week_start)} – ${fmtDate(payload.week_end)}</div>
       ${appUrl ? `<a href="${appUrl}" style="display:inline-block;margin-top:12px;padding:8px 16px;background:${BRAND.gold};color:${BRAND.navyDark};font-size:12px;font-weight:700;border-radius:8px;text-decoration:none;">Open the dashboard</a>` : ''}
     </div>
-    ${narrativeBlock}
     <table role="presentation" style="width:100%;border-collapse:collapse;margin:16px 0;"><tr>
       ${statCell('Submission rate', `${t.submission_rate}%`)}
       ${statCell('Commitments done', String(t.commitments_completed))}
@@ -89,7 +83,7 @@ export function renderWeeklyEmail(payload: WeeklySummaryPayload, narrative: stri
       ${statCell('On-time %', t.on_time_delivery_pct === null ? '—' : `${t.on_time_delivery_pct}%`)}
       ${statCell('Open blockers', String(t.open_blockers))}
     </tr></table>
-    ${attentionHtml(payload.attention, appUrl)}
+    ${attentionHtml(payload.attention)}
     ${body}
     <div style="margin-top:20px;font-size:11px;color:#9a9aa0;text-align:center;">
       Meril Daily Work Tracker · automated weekly summary${appUrl ? ` · <a href="${appUrl}" style="color:${BRAND.navy};">open the dashboard</a>` : ''}
@@ -100,7 +94,6 @@ export function renderWeeklyEmail(payload: WeeklySummaryPayload, narrative: stri
 
 export async function sendWeeklyEmail(
   payload: WeeklySummaryPayload,
-  narrative: string | null,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const user = process.env.GMAIL_USER
   const pass = process.env.GMAIL_APP_PASSWORD
@@ -116,7 +109,7 @@ export async function sendWeeklyEmail(
       connectionTimeout: 15000,
       greetingTimeout: 15000,
     })
-    const { subject, html } = renderWeeklyEmail(payload, narrative)
+    const { subject, html } = renderWeeklyEmail(payload)
     await transport.sendMail({
       from: `"Daily Work Tracker" <${user}>`,
       to: RECIPIENTS.to,
