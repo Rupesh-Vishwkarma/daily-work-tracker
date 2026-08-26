@@ -361,6 +361,12 @@ Chronological. Tags: `v1.0.0`, `v2.0.0`, `v4.0.0`, `v4.1`, `v5`, `v6`. Line vers
 - `2146ac6` **feat(weekly-summary): automated weekly team summary email** — Sunday Vercel cron; Gmail SMTP; manager Weekly Report tab (generate/send/history); `weekly_summaries` table (`supabase_schema_v5.sql`); `lib/summary.ts` / `weekly.ts` / `email.ts` / `ai.ts`; Vitest coverage for aggregation + AI data boundary.
 - `d9cb0d1` **refactor(weekly-summary): drop AI narrative, clean up email** — Gemini narrative removed from email and Weekly Report UI (duplicated deterministic breakdown / raw markdown); narrative stored as null; Gemini no longer wired into the send flow; redundant per-item "review on the dashboard" links removed from Needs attention.
 
+### Post-v6.2 — weekly reminder deadline pill
+- **Weekly commitment "Complete by" deadline pill** (`EmployeePage.tsx`) — the weekly reminder card header now shows a prominent "Complete by «date»" pill (earliest open weekly due date), and each commitment row uses horizon-aware wording ("Complete by" for weekly, "Due" for daily) with the accent color, so the deadline is unmistakable. Client-only; no schema impact.
+
+### Operations
+- **2026-08-26 — Gmail App Password rotated.** The weekly summary email failed in production with `535-5.7.8 BadCredentials`; the Gmail App Password was regenerated and updated in Vercel (Production) + local `.env.local`, then redeployed. Config-only, no code change. Rotation runbook lives in `README.md`; incident recorded in `RISKS_AND_ISSUES.md`.
+
 ---
 
 ## 11. Non-functional characteristics (current)
@@ -458,4 +464,4 @@ Built after the tracker is proven internally:
 
 ---
 
-*Blueprint updated from the codebase and git history through commit `d9cb0d1` (`refactor(weekly-summary): drop AI narrative, clean up email`, 2026-07-18). Local uncommitted UX polish on the weekly reminder "Complete by" header (EmployeePage) is not part of this snapshot until committed.*
+*Blueprint updated from the codebase and git history through commit `d9cb0d1` (`refactor(weekly-summary): drop AI narrative, clean up email`, 2026-07-18), plus the post-v6.2 weekly reminder "Complete by" deadline pill (EmployeePage) now committed, and the 2026-08-26 Gmail App Password rotation (config-only, see Operations).*

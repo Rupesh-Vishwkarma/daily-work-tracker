@@ -185,13 +185,16 @@ function ManagerNotes({ comments }: { comments: Comment[] }) {
 }
 
 // ── Follow-up card: resolve open commitments (daily block + weekly reminder) ───
-function FollowUpCard({ promises, projects, onResolve, title, subtitle, accent = '#4b3e9d' }: {
+function FollowUpCard({ promises, projects, onResolve, title, subtitle, accent = '#4b3e9d', deadline }: {
   promises: Commitment[]
   projects: Project[]
   onResolve: (id: string, action: ResolveAction, note: string) => Promise<void>
   title: string
   subtitle: string
   accent?: string
+  // When set, a prominent "Complete by <date>" pill is shown in the header so the
+  // deadline is unmistakable (used for the weekly commitment reminder).
+  deadline?: string
 }) {
   const [notes, setNotes] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState<string | null>(null)
@@ -203,8 +206,11 @@ function FollowUpCard({ promises, projects, onResolve, title, subtitle, accent =
 
   return (
     <div style={{ ...CARD, padding: '20px 24px', marginBottom: 16, border: `1px solid ${accent}40` }}>
-      <div style={{ fontWeight: 700, fontSize: 15, letterSpacing: '-0.02em', marginBottom: 4 }}>
-        {title}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+        <div style={{ fontWeight: 700, fontSize: 15, letterSpacing: '-0.02em' }}>
+          {title}
+        </div>
+        {deadline && <span style={DUE_PILL}>Complete by {fmtDue(deadline)}</span>}
       </div>
       <div style={{ fontSize: 13, color: '#6E6E73', marginBottom: 14 }}>
         {subtitle}
@@ -223,7 +229,7 @@ function FollowUpCard({ promises, projects, onResolve, title, subtitle, accent =
                   ⟳ carried ×{c.carry_count}
                 </span>
               )}
-              <span style={{ fontSize: 11, color: '#AEAEB2', marginLeft: 'auto' }}>due {fmtDue(c.due_date)}</span>
+              <span style={{ fontSize: 11.5, fontWeight: 700, color: accent, marginLeft: 'auto' }}>{c.horizon === 'week' ? 'Complete by' : 'Due'} {fmtDue(c.due_date)}</span>
             </div>
             <div style={{ fontSize: 14, color: '#1D1D1F', lineHeight: 1.5, marginBottom: 10 }}>{c.text}</div>
             <input
@@ -546,6 +552,9 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
   // every day until Completed.
   const openWeekly = commitments.filter(c => c.status === 'open' && c.horizon === 'week')
   const hasOpenWeekly = openWeekly.length > 0
+  // Earliest due date among open weekly commitments — surfaced as the "Complete by"
+  // deadline in the reminder card header.
+  const weeklyDeadline = openWeekly.reduce<string>((min, c) => (min && min <= c.due_date ? min : c.due_date), '')
   // A new daily commitment is optional if one is already committed for the next
   // day (e.g. today's task was carried forward — it now serves as tomorrow's goal).
   const hasNextDayDaily = commitments.some(c => c.status === 'open' && c.horizon === 'day' && c.due_date >= nextDay)
@@ -727,6 +736,7 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
                 title="Your weekly commitment"
                 subtitle="A reminder that stays until you complete it. Update it whenever you make progress — this never blocks your daily update."
                 accent="#4b3e9d"
+                deadline={weeklyDeadline}
               />
             )}
 
