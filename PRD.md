@@ -4,7 +4,7 @@
 |-------|-------|
 | Product | Meril Daily Work Tracker (Team Tracking System) |
 | Owner | Rupesh Vishwkarma |
-| Current version | 6.2.0 (commit `d9cb0d1`, main) |
+| Current version | 7.0.0 — weekly-only commitments (commit `d64656a`, main; tag `TeamTrackingV2.2`) |
 | Repository | github.com/Rupesh-Vishwkarma/daily-work-tracker |
 | Hosting | Vercel (auto-deploy from `main`) |
 | Backend | Supabase (PostgreSQL + Supabase Auth + Storage + Realtime Broadcast) |
@@ -20,17 +20,17 @@
 
 This is the single source of truth for the project. It has three layers:
 
-1. **As-built (§1–§9)** — exactly what exists and runs today on `main` through `d9cb0d1` (v6 core + v6.1 realtime + absence/export/toast + weekly summary email).
-2. **Change history (§10)** — every commit, change, and fix from first commit through `d9cb0d1`, so anyone can reconstruct how the product got here.
+1. **As-built (§1–§9)** — exactly what exists and runs today on `main` through `d64656a` (v6 core + v6.1 realtime + absence/export/toast + weekly summary email + **v7 weekly-only commitments**).
+2. **Change history (§10)** — every commit, change, and fix from first commit through `d64656a`, so anyone can reconstruct how the product got here.
 3. **Forward roadmap (§11–§16)** — what's still deferred (remaining email digests, Zoho, enterprise hardening), plus success metrics and open questions.
 
 ---
 
 ## 1. Overview
 
-The Daily Work Tracker is an internal web app for a Meril Life Sciences engineering/XR team (~10 members, one manager). Employees log a daily work update — tasks with project, status, optional hours, "what changed since yesterday," blockers, and attachments — and make **commitments** (a daily and a weekly promise) that the app follows up on the next working day. A single manager reviews submissions, tracks projects and deadlines, surfaces blockers, monitors commitment reliability, broadcasts announcements, exports CSV reports, reads the **Weekly Report**, and manages the team roster.
+The Daily Work Tracker is an internal web app for a Meril Life Sciences engineering/XR team (~10 members, one manager). Employees log a daily work update — tasks with project, status, optional hours, "what changed since yesterday," blockers, and attachments — and make a **weekly commitment** (one open promise per week) that the app follows up on and reminds them about until it is delivered. A single manager reviews submissions, tracks projects and deadlines, surfaces blockers, monitors commitment reliability, broadcasts announcements, exports CSV reports, reads the **Weekly Report**, and manages the team roster.
 
-It began as a static HTML prototype (`daily_work_tracker.html`, `index-v4.html` at the parent repo root — legacy) and was rebuilt as a Next.js app backed by Supabase. `v6` added the commitments accountability loop, progress evidence (attachments + what-changed), IST/Mon–Sat date logic, and a full rebrand to the Meril Academy design system. Post-v6 shipped realtime live updates (v6.1), employee self-service absence, task CSV export, submit-error toasts, and the **automated weekly summary email** (Phase 3 first slice) with an in-app Weekly Report tab. The browser tab title is **Immersive Team**.
+It began as a static HTML prototype (`daily_work_tracker.html`, `index-v4.html` at the parent repo root — legacy) and was rebuilt as a Next.js app backed by Supabase. `v6` added the commitments accountability loop, progress evidence (attachments + what-changed), IST/Mon–Sat date logic, and a full rebrand to the Meril Academy design system. Post-v6 shipped realtime live updates (v6.1), employee self-service absence, task CSV export, submit-error toasts, and the **automated weekly summary email** (Phase 3 first slice) with an in-app Weekly Report tab. **`v7` removed the daily commitment entirely — the app now tracks only a weekly commitment, adds Edit and Cancel outcomes (each with a required reason recorded on the commitment), a new `cancelled` status that is excluded from reliability metrics, and defers every commitment action so it is only written when the employee submits that day's log.** The browser tab title is **Immersive Team**.
 
 ### Vision
 A fast, low-friction daily standup replacement that gives one manager a clear, real-time picture of what the team is doing, where progress is being made, and what's blocked — grounded in **output and accountability**, not hours or surveillance.
@@ -107,7 +107,7 @@ app/
 
 ### 4.3 Data model (Supabase)
 
-Applied in order: `supabase_schema.sql` (v1) → `v2` → `v3` → **`v4`** (`absence_note`) → **`v5`** (`weekly_summaries`). RLS is disabled on all tables; the service-role key + `proxy.ts` (and cron secret) are the only access gate.
+Applied in order: `supabase_schema.sql` (v1) → `v2` → `v3` → **`v4`** (`absence_note`) → **`v5`** (`weekly_summaries`) → **`v6`** (`cancelled` commitment status). RLS is disabled on all tables; the service-role key + `proxy.ts` (and cron secret) are the only access gate.
 
 | Table | Key fields | Notes |
 |-------|-----------|-------|
@@ -124,7 +124,7 @@ Applied in order: `supabase_schema.sql` (v1) → `v2` → `v3` → **`v4`** (`ab
 
 **`project_tasks` item shape** (jsonb): `{ project_id, task, time, status, blockers, what_changed?, attachments? }` where `status ∈ in_progress | completed | blocked` and each attachment is `{ type: 'image' | 'file' | 'link', url, name }`.
 
-**`commitments` enums:** `horizon ∈ day | week`; `status ∈ open | done | partial | missed`. `project_id` may be a real id, `'__other__'` (Other Work), or null. Runtime outcomes written today are mainly `open` / `done` (Partial & Carry Forward keep the row open and bump `carry_count`).
+**`commitments` enums:** `horizon ∈ day | week`; `status ∈ open | done | partial | missed | cancelled` (`cancelled` added in `supabase_schema_v6.sql`). Since **v7 only weekly commitments are created** (`horizon = 'week'`); historical `day` rows are preserved for the record but no new ones are written. `project_id` may be a real id, `'__other__'` (Other Work), or null. Runtime outcomes written today are `open` / `done` / `cancelled` (Partial & Carry Forward keep the row open and bump `carry_count`; **Cancel** closes the row with `status = 'cancelled'` and a required reason in `outcome_note`, and is **excluded from reliability metrics** — it is not a broken promise). **Edit** rewrites `text` and appends a dated `"<old> -> <new> - <reason>"` audit line to `outcome_note`.
 
 ### 4.4 API surface
 
@@ -134,8 +134,8 @@ All session routes sit behind `proxy.ts`. "any (scoped)" = authenticated; employ
 |-------|---------|------|---------|
 | `/api/auth/login` | POST | public | Manager (Supabase Auth) or employee (table) login; sets signed cookie |
 | `/api/auth/logout` | POST | any | Clear cookie |
-| `/api/entries` | GET/POST/PATCH/DELETE | GET/POST/PATCH any (scoped); DELETE manager | Entries CRUD; employees scoped to own; **edit-until-EOD** lock; commitment gate on POST; self-absence with optional `absence_note` (graceful if v4 column missing) |
-| `/api/commitments` | GET/POST/PATCH/DELETE | GET/POST/PATCH any (scoped); DELETE manager | Commitments loop; daily-only auto-carry on GET; resolve (done) / horizon-aware carry on PATCH |
+| `/api/entries` | GET/POST/PATCH/DELETE | GET/POST/PATCH any (scoped); DELETE manager | Entries CRUD; employees scoped to own; **edit-until-EOD** lock; self-absence with optional `absence_note` (graceful if v4 column missing). *(v7: the old server-side gate that blocked submit on an overdue daily commitment was removed.)* |
+| `/api/commitments` | GET/POST/PATCH/DELETE | GET/POST/PATCH any (scoped); DELETE manager | Commitments loop. **GET** returns open/resolved commitments (no auto-carry — daily auto-carry removed in v7). **PATCH** resolves (`done` / `partial` / `carry`), **edits** text (`action: 'edit'`, requires a reason), or **cancels** (`status: 'cancelled'`, requires a reason). The client stages these actions and only fires the PATCH/POST calls when the day's log is submitted (§6). |
 | `/api/attachments` | POST | any (scoped) | Upload screenshot/file to Storage (≤2 MB, allowlisted types); returns public URL |
 | `/api/projects` | GET any; POST/PATCH/DELETE manager | Projects CRUD |
 | `/api/employees` | all manager | Roster + password management; GET **excludes** password column |
@@ -161,23 +161,28 @@ All session routes sit behind `proxy.ts`. "any (scoped)" = authenticated; employ
 
 ## 6. Functional requirements — Commitments loop (the accountability core)
 
-Accountability comes from comparing what a member *promised* to what they *delivered*. The employee's daily flow is three steps.
+Accountability comes from comparing what a member *promised* to what they *delivered*. **As of v7 the app tracks only a weekly commitment** — the daily commitment and its blocking follow-up were removed because a daily promise was too recurring and almost always carried forward. The employee's daily flow is three steps.
 
-**Step 1 — Follow up (daily).** The app surfaces open **daily** commitments due today or earlier. The employee marks each **Completed / Partial / Carry Forward**, with an optional outcome note. **Completed** closes the commitment; **Partial** (some progress) and **Carry Forward** (none) both keep it open and roll it to the next working day. There is **no "Missed"** outcome. Submitting the day's update is **blocked** (client + server) until due **daily** commitments are resolved. If a daily task is Partial/Carry Forward, the carried copy becomes the next day's goal, so **a new daily commitment is optional** that day.
+**Step 1 — Follow up (weekly).** The app surfaces the open **weekly** commitment as a **non-blocking reminder every day** (it never blocks the daily update). The employee can act on it — **Completed / Partial / Carry Forward / Edit / Cancel** — from any day:
+- **Completed** closes it (`done`). **Partial** (some progress) and **Carry Forward** (none) keep it open and roll it to next week's Saturday, bumping `carry_count`.
+- **Edit** changes the wording (e.g. scope shifted) and **requires a short reason**, which is appended to the commitment's `outcome_note` as a dated audit line.
+- **Cancel** drops a commitment that no longer applies. It **requires a reason**, sets `status = 'cancelled'`, and is **excluded from reliability metrics** (not counted as missed/broken). Because the rule is always one open weekly, **cancelling forces the employee to enter a replacement weekly commitment before they can submit**.
+
+**Deferred writes (v7).** None of the Step-1 actions hit the database when clicked — they are **staged locally** and shown as a pending banner (with **Undo**). They are only applied when the employee **submits that day's log**. If they leave without submitting (or hit Cancel on the form), the staged changes are **discarded** and nothing changes in the database. This prevents a commitment change from being saved without the accompanying daily update.
 
 **Step 2 — Log.** Enter today's work as task rows (§7.1), *or* mark self absent (§7.4).
 
-**Step 3 — Commit.** Daily: at least one **daily** commitment ("what will you accomplish by the next working day?"), each linked to a project or tagged Other Work — unless one is already carried to the next day (then optional). Weekly: the rule is **always have exactly one open weekly commitment**. A new weekly (due that week's Saturday) is **mandatory when none is open** — the first login of the week, or right after completing one mid-week — and **non-mandatory while a carried weekly is still open**. It is **skipped** if the first login of the week is Saturday with nothing open. Each commitment's exact due date is shown (a "Due «Weekday, DD Mon»" / "Complete by …" pill).
+**Step 3 — Commit.** The rule is **always have exactly one open weekly commitment**. A new weekly (due that week's Saturday) is **mandatory when none is open** — the first login of the week, right after completing one mid-week, or when the currently open one is being **cancelled/completed in this same submission**. It is **non-mandatory while a carried/open weekly remains**, and **skipped** if the first login of the week is Saturday with nothing open. The input's copy adapts (e.g. "replacement weekly commitment" when the open one is being closed). Each commitment's exact due date is shown (a "Complete by «Weekday, DD Mon»" pill).
 
-**Weekly carry & persistent reminder.** On Saturday the weekly is resolved **Completed / Partial / Carry Forward**. Partial/Carry Forward roll it to **next week's Saturday** and keep it open. A carried/open weekly is shown **every day as a non-blocking reminder** (it never blocks the daily update) and can be marked Completed on any day. When completed mid-week, a new weekly for the current week's Saturday becomes mandatory again; once Completed it disappears.
+**Weekly carry & persistent reminder.** On Saturday the weekly is typically resolved **Completed / Partial / Carry Forward**. Partial/Carry Forward roll it to **next week's Saturday** and keep it open. A carried/open weekly is shown **every day as a non-blocking reminder** and can be resolved on any day. When completed or cancelled mid-week, a new weekly for the current week's Saturday becomes mandatory again; once Completed/Cancelled it disappears from the reminder.
 
 **Rules & signals:**
-- The week runs **Sun–Sat** with **Mon–Sat working days** (Sunday is non-working; employees do not submit on Sunday). Follow-up is weekend-aware (`nextWorkingDay` skips Sunday), so Saturday's daily promise is followed up Monday.
+- The week runs **Sun–Sat** with **Mon–Sat working days** (Sunday is non-working; employees do not submit on Sunday).
 - **Weekly summary (shipped):** each week's Mon–Sat work is aggregated into a combined team summary, emailed to the manager on Sunday and viewable in the manager **Weekly Report** tab (§8.7).
-- **Auto-carry (daily only):** on GET, open **daily** commitments past their due date roll forward to today, with `carry_count` incremented by the number of working days missed (so ignoring a promise for 3 days shows "carried ×3"). Weekly commitments are **not** auto-carried — they stay open as a persistent reminder and roll only via explicit Carry Forward.
-- **On-time Delivery %** = completed **without ever carrying** (`carry_count === 0`) ÷ total completed, per employee per period — the headline metric shown to both manager (Commitments tab) and employee (My Stats). Open/carried commitments are excluded until completed.
+- **No auto-carry:** weekly commitments are **never** auto-carried — they stay open as a persistent reminder and roll only via explicit Partial/Carry Forward. (The v6 daily-only auto-carry on GET was removed with the daily commitment in v7.)
+- **On-time Delivery %** = completed **without ever carrying** (`carry_count === 0`) ÷ total completed, per employee per period — the headline metric shown to both manager (Commitments tab) and employee (My Stats). Open/carried commitments are excluded until completed; **cancelled commitments are excluded from both the numerator and denominator** so a legitimate scope change never dents reliability.
 - A commitment **carried 3+ times** is escalated on the manager's Commitments tab as **stalled work**.
-- **Server enforcement:** POST `/api/commitments` validates required fields, horizon, and scopes `employee_id` to the caller; PATCH enforces ownership and valid action/status; DELETE is manager-only.
+- **Server enforcement:** POST `/api/commitments` validates required fields, horizon, and scopes `employee_id` to the caller; PATCH enforces ownership and valid action/status and **requires a reason for `edit` and `cancelled`**; DELETE is manager-only.
 
 ---
 
@@ -188,7 +193,7 @@ Accountability comes from comparing what a member *promised* to what they *deliv
 - **FR-E2:** Status indicator circle per task: in-progress = navy ring, completed = solid green ✓, blocked = solid red !.
 - **FR-E3:** Attachments per task — **screenshot/image** and **file** upload (client-compressed, ≤2 MB, allowlisted types) and **inline link** entry. Attachments open in a single new tab.
 - **FR-E4:** Overall workload selector (light / medium / heavy).
-- **FR-E5:** Submit validation: ≥1 task with a title; "what changed" filled for every task; due daily commitments resolved; ≥1 daily commitment (unless one is already carried to the next day); weekly commitment whenever no open weekly exists (and not a Saturday first-login).
+- **FR-E5:** Submit validation: ≥1 task with a title; "what changed" filled for every task; a weekly commitment whenever no open weekly will remain after this submission — i.e. none is open, or the open one is being completed/cancelled in this same submission — except on a Saturday first-login with nothing open. On submit, the entry is saved first, then any **staged** weekly-commitment actions (complete/partial/carry/edit/cancel) are applied, then the replacement weekly (if required) is created. *(v7: there is no longer a daily-commitment requirement or a daily follow-up gate.)*
 - **FR-E5b:** Submit failures surface as a **fixed error toast** (auto-dismissible), not an inline banner that can scroll out of view.
 
 ### 7.2 Edit & lock
@@ -224,7 +229,7 @@ Accountability comes from comparing what a member *promised* to what they *deliv
 - **FR-M7:** Live refresh via Realtime nudge when employees submit/edit.
 
 ### 8.2 Commitments
-- **FR-C1:** Team stat cards — On-time Delivery %, Commitments Made, Completed, Due/Overdue, Stalled (3+ carries).
+- **FR-C1:** Team stat cards — On-time Delivery %, Commitments Made, Completed, Due/Overdue, Stalled (3+ carries). **Cancelled commitments are excluded** from Commitments Made and the reliability denominator (a scope change is not a broken promise).
 - **FR-C2:** Stalled-work escalation list (committed ≥3 times without delivery).
 - **FR-C3:** Per-member reliability, promised/delivered/open counts, expandable commitment history with outcome notes; period selector (7/30/90 days).
 
@@ -291,7 +296,7 @@ Accountability comes from comparing what a member *promised* to what they *deliv
 
 ## 10. Complete change history (first commit → `d9cb0d1`)
 
-Chronological. Tags: `v1.0.0`, `v2.0.0`, `v4.0.0`, `v4.1`, `v5`, `v6`. Line versions after that: **v6.1** (realtime), **v6.2** (weekly summary + absence/export).
+Chronological. Tags: `v1.0.0`, `v2.0.0`, `v4.0.0`, `v4.1`, `v5`, `v6`. Line versions after that: **v6.1** (realtime), **v6.2** (weekly summary + absence/export). Restore-point tags for the v7 commitment rework: `TeamTrackingV1` (pre-removal snapshot), `TeamTrackingV2`, `TeamTrackingV2.1`, `TeamTrackingV2.2`.
 
 ### Genesis — Next.js + Supabase (2026-06-18)
 - `667c148` **Add Next.js app with Supabase integration** — initial rebuild of the static HTML tracker into a Next.js App Router app backed by Supabase (v1 schema: `employees`, `entries` with free-text `work`/`blockers`).
@@ -364,8 +369,16 @@ Chronological. Tags: `v1.0.0`, `v2.0.0`, `v4.0.0`, `v4.1`, `v5`, `v6`. Line vers
 ### Post-v6.2 — weekly reminder deadline pill
 - **Weekly commitment "Complete by" deadline pill** (`EmployeePage.tsx`) — the weekly reminder card header now shows a prominent "Complete by «date»" pill (earliest open weekly due date), and each commitment row uses horizon-aware wording ("Complete by" for weekly, "Due" for daily) with the accent color, so the deadline is unmistakable. Client-only; no schema impact.
 
+### v7 — weekly-only commitments (2026-09)
+The commitment model was simplified from a daily + weekly pair to **weekly-only**, with richer outcomes and deferred writes. Rolled out in staged, individually-tagged restore points. **No historical data was deleted** — existing `horizon = 'day'` rows remain for the record; the app simply stops creating and following up on daily commitments.
+- `1622170` **(`TeamTrackingV1`)** Pre-removal snapshot — also shipped the weekly reminder "Complete by" deadline pill; this tag is the restore point before the daily commitment was removed.
+- `ad33bbf` **(`TeamTrackingV2`) Remove daily commitment, keep only weekly.** Dropped the daily commitment input, its blocking follow-up, and the daily auto-carry on GET; removed the server-side submit gate on overdue daily commitments (`api/entries`). Weekly commitment retained as a non-blocking, once-per-week reminder. Files: `api/commitments`, `api/entries`, `EmployeePage`.
+- `935561a` **(`TeamTrackingV2.1`) Add Edit and Cancel for the weekly commitment.** New `cancelled` status (`supabase_schema_v6.sql`, extends the `commitments_status_check` constraint; `CommitmentStatus` type); PATCH handles `action: 'edit'` and `status: 'cancelled'`; **Edit and Cancel each require a comment/reason** recorded on the commitment (edits append a dated `"<old> -> <new> - <reason>"` audit line to `outcome_note`). Cancelled commitments are excluded from delivery/reliability metrics in `CommitmentsTab` and My Stats (new "Cancelled" chip).
+- `d64656a` **(`TeamTrackingV2.2`, current) Defer weekly edit/cancel to daily-log submit.** All weekly-commitment actions (Complete/Partial/Carry/Edit/Cancel) are **staged client-side** (`pendingCommit`) with an Undo affordance and only written when the day's log is submitted; leaving without submitting discards them. Cancelling forces a replacement weekly before submit. `FollowUpCard` refactored to stage via `onStage`/`onUnstage`; `handleSubmit` saves the entry, applies staged commits, then creates the replacement weekly; `needWeekly` recomputed from staged closures.
+
 ### Operations
 - **2026-08-26 — Gmail App Password rotated.** The weekly summary email failed in production with `535-5.7.8 BadCredentials`; the Gmail App Password was regenerated and updated in Vercel (Production) + local `.env.local`, then redeployed. Config-only, no code change. Rotation runbook lives in `README.md`; incident recorded in `RISKS_AND_ISSUES.md`.
+- **2026-09 — Accidental weekly-commitment cancellations restored.** During testing against a stale (pre-v7.2) cached bundle, two open weekly commitments (Prem, Rupesh) were cancelled without a submit. They were restored (`status → open`, cleared `resolved_at`/`outcome_note`) via a one-off service-role script (since removed). Root cause was a stale browser bundle, not a code defect; the fix was a hard refresh.
 
 ---
 
@@ -384,7 +397,7 @@ Chronological. Tags: `v1.0.0`, `v2.0.0`, `v4.0.0`, `v4.1`, `v5`, `v6`. Line vers
 ## 12. Known limitations / tech debt
 
 - Legacy static HTML files still at the parent repo root (`daily_work_tracker.html`, `index-v4.html`).
-- Five schema files (`v1`–`v5`), applied cumulatively; **v5 is current** (requires v4 `absence_note` first).
+- Six schema files (`v1`–`v6`), applied cumulatively; **v6 is current** (adds the `cancelled` status; requires v5 `weekly_summaries` and v4 `absence_note` first).
 - One-entry-per-day is convention, not a DB constraint.
 - Styling split between inline styles and global CSS (Tailwind present but largely unused).
 - Manager identity/email hardcoded in the login route.
@@ -464,4 +477,4 @@ Built after the tracker is proven internally:
 
 ---
 
-*Blueprint updated from the codebase and git history through commit `d9cb0d1` (`refactor(weekly-summary): drop AI narrative, clean up email`, 2026-07-18), plus the post-v6.2 weekly reminder "Complete by" deadline pill (EmployeePage) now committed, and the 2026-08-26 Gmail App Password rotation (config-only, see Operations).*
+*Blueprint updated from the codebase and git history through commit `d64656a` (`feat(commitments): defer weekly edit/cancel to daily-log submit`, tag `TeamTrackingV2.2`, 2026-09). This is the **v7.0 weekly-only commitments** line: the daily commitment and its blocking follow-up were removed, Edit/Cancel outcomes (each with a required reason) were added on top of a new `cancelled` status (`supabase_schema_v6.sql`), and all commitment actions are now deferred until the day's log is submitted. Prior baselines: `d9cb0d1` (v6.2 weekly summary), plus the 2026-08-26 Gmail App Password rotation (config-only, see Operations).*

@@ -59,9 +59,9 @@ Ordered by severity. Each item notes the root cause, impact, and suggested fix.
 - **Where:** `app/page.tsx` — treats any non-401 from `GET /api/broadcast` as "valid session."
 - **Fix:** Use an explicit session-validation endpoint.
 
-### 10. Auto-carry write is unbounded and non-atomic
-- **Where:** `app/api/commitments/route.ts` GET — `Promise.all` of individual UPDATEs on a read path, no transaction.
-- **Fix:** Move to a bounded/transactional batch update (or a scheduled job).
+### 10. Auto-carry write is unbounded and non-atomic — RESOLVED (v7)
+- **Where:** `app/api/commitments/route.ts` GET — previously a `Promise.all` of individual UPDATEs on a read path, no transaction.
+- **Status (v7, 2026-09):** No longer applicable. The daily commitment (and its auto-carry on GET) was removed entirely (tag `TeamTrackingV2`). Weekly commitments are never auto-carried — they roll only via an explicit Partial/Carry Forward action, which is a single scoped UPDATE. The read-path write is gone.
 
 ---
 
@@ -74,6 +74,12 @@ Ordered by severity. Each item notes the root cause, impact, and suggested fix.
 ---
 
 ## Incident log (resolved)
+
+### 2026-09 — Weekly commitments "disappeared" after testing cancel without submit
+- **Symptom:** Two members' open weekly commitments (Prem, Rupesh) vanished; reported as data loss.
+- **Root cause:** Not a code defect. The v7.2 build (tag `TeamTrackingV2.2`) defers commitment writes until the daily log is submitted, but the user tested against a **stale cached JS bundle** from the pre-deferral deployment, where Cancel wrote immediately. The two rows were genuinely cancelled without an accompanying submit.
+- **Resolution:** Restored the rows via a one-off service-role script (`status → open`, cleared `resolved_at` / `outcome_note`); script removed after use. The lasting fix for the stale bundle is a hard refresh.
+- **Follow-up:** Deferred-write behavior confirmed correct in `TeamTrackingV2.2` (see `PRD.md` §6 and change history).
 
 ### 2026-08-26 — Weekly summary email failing with `535-5.7.8 BadCredentials`
 - **Symptom:** In-app banner "Last send failed: Invalid login: 535-5.7.8 Username and Password not accepted" on the production app.
