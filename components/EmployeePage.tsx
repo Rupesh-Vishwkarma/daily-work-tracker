@@ -31,6 +31,13 @@ const RESOLVE_ACTIONS = [
 ]
 type ResolveAction = (typeof RESOLVE_ACTIONS)[number]['id']
 
+// A commitment action ("edit" rewords it; the rest resolve/roll it) that has been
+// staged in the UI but not yet saved. Staged actions are applied only when the
+// member submits their daily update, so a commitment change is always recorded
+// alongside that day's log.
+type CommitAction = ResolveAction | 'edit'
+interface PendingCommit { action: CommitAction; note: string; text?: string; reason?: string }
+
 // Small uppercase field label used across the task form.
 const LBL = { display: 'block', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' as const, color: '#8a90a2', marginBottom: 5 }
 
@@ -177,13 +184,27 @@ function ManagerNotes({ comments }: { comments: Comment[] }) {
 }
 
 // ── Follow-up card: resolve the open weekly commitment (non-blocking reminder) ─
-function FollowUpCard({ promises, projects, onResolve, onEdit, title, subtitle, accent = '#4b3e9d', deadline }: {
+// Human-readable summary of a staged (not-yet-saved) commitment action.
+function stagedLabel(p: PendingCommit): string {
+  switch (p.action) {
+    case 'done': return 'Will mark Completed'
+    case 'partial': return 'Will log Partial progress'
+    case 'carry': return 'Will carry to next week'
+    case 'cancel': return 'Will cancel this commitment'
+    case 'edit': return 'Will update the wording'
+    default: return 'Pending change'
+  }
+}
+
+function FollowUpCard({ promises, projects, pending, onStage, onUnstage, title, subtitle, accent = '#4b3e9d', deadline }: {
   promises: Commitment[]
   projects: Project[]
-  onResolve: (id: string, action: ResolveAction, note: string) => Promise<void>
-  // When provided, an "Edit" action lets the user reword a still-open commitment
-  // (the plan changed) without closing it.
-  onEdit?: (id: string, text: string) => Promise<void>
+  // Actions are STAGED here, not saved immediately. onStage records the intended
+  // change; it is committed only when the member submits their daily update.
+  // onUnstage clears a staged change. Edit and Cancel both require a comment.
+  pending: Record<string, PendingCommit>
+  onStage: (id: string, action: CommitAction, payload: { note?: string; text?: string; reason?: string }) => void
+  onUnstage: (id: string) => void
   title: string
   subtitle: string
   accent?: string
@@ -192,24 +213,32 @@ function FollowUpCard({ promises, projects, onResolve, onEdit, title, subtitle, 
   deadline?: string
 }) {
   const [notes, setNotes] = useState<Record<string, string>>({})
-  const [busy, setBusy] = useState<string | null>(null)
-  // Id of the commitment currently being reworded, plus its draft text.
+  // Id of the commitment currently being reworded, plus its draft text and the
+  // required reason for the change.
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState('')
+  const [editReason, setEditReason] = useState('')
+  // Id of the commitment being cancelled, plus the required cancellation reason.
+  const [cancellingId, setCancellingId] = useState<string | null>(null)
+  const [cancelReason, setCancelReason] = useState('')
 
-  async function act(id: string, action: ResolveAction) {
-    setBusy(id)
-    try { await onResolve(id, action, notes[id] || '') } finally { setBusy(null) }
+  function act(id: string, action: ResolveAction) {
+    onStage(id, action, { note: notes[id] || '' })
   }
 
-  async function saveEdit(id: string) {
-    if (!onEdit || !editDraft.trim()) return
-    setBusy(id)
-    try {
-      await onEdit(id, editDraft.trim())
-      setEditingId(null)
-      setEditDraft('')
-    } finally { setBusy(null) }
+  function saveEdit(id: string) {
+    if (!editDraft.trim() || !editReason.trim()) return
+    onStage(id, 'edit', { text: editDraft.trim(), reason: editReason.trim() })
+    setEditingId(null)
+    setEditDraft('')
+    setEditReason('')
+  }
+
+  function confirmCancel(id: string) {
+    if (!cancelReason.trim()) return
+    onStage(id, 'cancel', { note: cancelReason.trim() })
+    setCancellingId(null)
+    setCancelReason('')
   }
 
   return (
@@ -239,53 +268,106 @@ function FollowUpCard({ promises, projects, onResolve, onEdit, title, subtitle, 
               )}
               <span style={{ fontSize: 11.5, fontWeight: 700, color: accent, marginLeft: 'auto' }}>{c.horizon === 'week' ? 'Complete by' : 'Due'} {fmtDue(c.due_date)}</span>
             </div>
-            {editingId === c.id ? (
-              <div>
-                <textarea
-                  value={editDraft}
-                  onChange={e => setEditDraft(e.target.value)}
-                  rows={2}
-                  autoFocus
-                  placeholder="Update your commitment…"
-                  style={{ width: '100%', padding: '8px 10px', border: `1px solid ${accent}55`, borderRadius: 8, fontSize: 14, fontFamily: FONT, outline: 'none', resize: 'none', background: 'white', boxSizing: 'border-box', lineHeight: 1.5, marginBottom: 8, boxShadow: 'none' }}
-                />
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  <button disabled={busy === c.id || !editDraft.trim()} onClick={() => saveEdit(c.id)}
-                    style={{ padding: '6px 14px', borderRadius: 980, fontSize: 12, fontWeight: 600, cursor: editDraft.trim() ? 'pointer' : 'not-allowed', fontFamily: FONT, border: 'none', background: accent, color: 'white', opacity: (busy === c.id || !editDraft.trim()) ? 0.5 : 1 }}>
-                    Save changes
-                  </button>
-                  <button disabled={busy === c.id} onClick={() => { setEditingId(null); setEditDraft('') }}
-                    style={{ padding: '6px 14px', borderRadius: 980, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, border: '1.5px solid rgba(0,0,0,0.15)', background: 'white', color: '#6E6E73' }}>
-                    Cancel edit
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div style={{ fontSize: 14, color: '#1D1D1F', lineHeight: 1.5, marginBottom: 10 }}>{c.text}</div>
-                <input
-                  type="text"
-                  value={notes[c.id] || ''}
-                  onChange={e => setNotes(prev => ({ ...prev, [c.id]: e.target.value }))}
-                  placeholder="Optional note on the outcome…"
-                  style={{ width: '100%', padding: '7px 10px', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 8, fontSize: 13, fontFamily: FONT, outline: 'none', background: 'white', boxSizing: 'border-box', marginBottom: 8, boxShadow: 'none' }}
-                />
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {RESOLVE_ACTIONS.map(a => (
-                    <button key={a.id} disabled={busy === c.id} onClick={() => act(c.id, a.id)}
-                      style={{ padding: '6px 14px', borderRadius: 980, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, border: `1.5px solid ${a.color}${a.solid ? '' : '80'}`, background: a.solid ? a.color : a.color + '12', color: a.solid ? 'white' : a.color, opacity: busy === c.id ? 0.5 : 1 }}>
-                      {c.horizon === 'week' && a.id === 'carry' ? 'Carry to next week' : a.label}
-                    </button>
-                  ))}
-                  {onEdit && (
-                    <button disabled={busy === c.id} onClick={() => { setEditingId(c.id); setEditDraft(c.text) }}
-                      style={{ padding: '6px 14px', borderRadius: 980, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, border: `1.5px solid ${accent}80`, background: accent + '12', color: accent, opacity: busy === c.id ? 0.5 : 1 }}>
-                      Edit
-                    </button>
+            {(() => {
+              const p = pending[c.id]
+              return (
+                <>
+                  <div style={{ fontSize: 14, color: p?.action === 'cancel' ? '#AEAEB2' : '#1D1D1F', textDecoration: p?.action === 'cancel' ? 'line-through' : 'none', lineHeight: 1.5, marginBottom: 10 }}>{c.text}</div>
+                  {p ? (
+                    <div style={{ background: 'white', border: `1px dashed ${accent}80`, borderRadius: 10, padding: '10px 12px' }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: accent, marginBottom: 4 }}>
+                        ⏳ {stagedLabel(p)} <span style={{ fontWeight: 500, color: '#6E6E73' }}>— applies when you submit your update</span>
+                      </div>
+                      {p.action === 'edit' && p.text && (
+                        <div style={{ fontSize: 13, color: '#1D1D1F', marginBottom: 4 }}>New wording: “{p.text}”</div>
+                      )}
+                      {(p.action === 'edit' ? p.reason : p.note) && (
+                        <div style={{ fontSize: 12.5, color: '#6E6E73', fontStyle: 'italic', marginBottom: 6 }}>“{p.action === 'edit' ? p.reason : p.note}”</div>
+                      )}
+                      {p.action === 'cancel' && (
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#B25900', marginBottom: 8 }}>Enter your new weekly commitment below before submitting.</div>
+                      )}
+                      <button onClick={() => onUnstage(c.id)}
+                        style={{ padding: '5px 12px', borderRadius: 980, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, border: '1.5px solid rgba(0,0,0,0.15)', background: 'white', color: '#6E6E73' }}>
+                        Undo
+                      </button>
+                    </div>
+                  ) : editingId === c.id ? (
+                    <div>
+                      <textarea
+                        value={editDraft}
+                        onChange={e => setEditDraft(e.target.value)}
+                        rows={2}
+                        autoFocus
+                        placeholder="Update your commitment…"
+                        style={{ width: '100%', padding: '8px 10px', border: `1px solid ${accent}55`, borderRadius: 8, fontSize: 14, fontFamily: FONT, outline: 'none', resize: 'none', background: 'white', boxSizing: 'border-box', lineHeight: 1.5, marginBottom: 8, boxShadow: 'none' }}
+                      />
+                      <textarea
+                        value={editReason}
+                        onChange={e => setEditReason(e.target.value)}
+                        rows={2}
+                        placeholder="What changed and why? (required)"
+                        style={{ width: '100%', padding: '8px 10px', border: `1px solid ${accent}40`, borderRadius: 8, fontSize: 13, fontFamily: FONT, outline: 'none', resize: 'none', background: 'white', boxSizing: 'border-box', lineHeight: 1.5, marginBottom: 8, boxShadow: 'none' }}
+                      />
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <button disabled={!editDraft.trim() || !editReason.trim()} onClick={() => saveEdit(c.id)}
+                          style={{ padding: '6px 14px', borderRadius: 980, fontSize: 12, fontWeight: 600, cursor: (editDraft.trim() && editReason.trim()) ? 'pointer' : 'not-allowed', fontFamily: FONT, border: 'none', background: accent, color: 'white', opacity: (!editDraft.trim() || !editReason.trim()) ? 0.5 : 1 }}>
+                          Stage changes
+                        </button>
+                        <button onClick={() => { setEditingId(null); setEditDraft(''); setEditReason('') }}
+                          style={{ padding: '6px 14px', borderRadius: 980, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, border: '1.5px solid rgba(0,0,0,0.15)', background: 'white', color: '#6E6E73' }}>
+                          Cancel edit
+                        </button>
+                      </div>
+                    </div>
+                  ) : cancellingId === c.id ? (
+                    <div>
+                      <textarea
+                        value={cancelReason}
+                        onChange={e => setCancelReason(e.target.value)}
+                        rows={2}
+                        autoFocus
+                        placeholder="Why are you cancelling this commitment? (required)"
+                        style={{ width: '100%', padding: '8px 10px', border: '1px solid rgba(255,59,48,0.4)', borderRadius: 8, fontSize: 13, fontFamily: FONT, outline: 'none', resize: 'none', background: 'white', boxSizing: 'border-box', lineHeight: 1.5, marginBottom: 8, boxShadow: 'none' }}
+                      />
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <button disabled={!cancelReason.trim()} onClick={() => confirmCancel(c.id)}
+                          style={{ padding: '6px 14px', borderRadius: 980, fontSize: 12, fontWeight: 600, cursor: cancelReason.trim() ? 'pointer' : 'not-allowed', fontFamily: FONT, border: 'none', background: '#FF3B30', color: 'white', opacity: (!cancelReason.trim()) ? 0.5 : 1 }}>
+                          Stage cancellation
+                        </button>
+                        <button onClick={() => { setCancellingId(null); setCancelReason('') }}
+                          style={{ padding: '6px 14px', borderRadius: 980, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, border: '1.5px solid rgba(0,0,0,0.15)', background: 'white', color: '#6E6E73' }}>
+                          Keep goal
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <input
+                        type="text"
+                        value={notes[c.id] || ''}
+                        onChange={e => setNotes(prev => ({ ...prev, [c.id]: e.target.value }))}
+                        placeholder="Optional note on the outcome…"
+                        style={{ width: '100%', padding: '7px 10px', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 8, fontSize: 13, fontFamily: FONT, outline: 'none', background: 'white', boxSizing: 'border-box', marginBottom: 8, boxShadow: 'none' }}
+                      />
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {RESOLVE_ACTIONS.map(a => (
+                          <button key={a.id}
+                            onClick={() => a.id === 'cancel' ? (setCancellingId(c.id), setCancelReason('')) : act(c.id, a.id)}
+                            style={{ padding: '6px 14px', borderRadius: 980, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, border: `1.5px solid ${a.color}${a.solid ? '' : '80'}`, background: a.solid ? a.color : a.color + '12', color: a.solid ? 'white' : a.color }}>
+                            {c.horizon === 'week' && a.id === 'carry' ? 'Carry to next week' : a.label}
+                          </button>
+                        ))}
+                        <button onClick={() => { setEditingId(c.id); setEditDraft(c.text); setEditReason('') }}
+                          style={{ padding: '6px 14px', borderRadius: 980, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, border: `1.5px solid ${accent}80`, background: accent + '12', color: accent }}>
+                          Edit
+                        </button>
+                      </div>
+                    </>
                   )}
-                </div>
-              </>
-            )}
+                </>
+              )
+            })()}
           </div>
         )
       })}
@@ -436,6 +518,10 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
   const [editMode, setEditMode] = useState(false)
   const [tasks, setTasks] = useState<LocalTask[]>([mkTask()])
   const [weeklyPromise, setWeeklyPromise] = useState('')
+  // Commitment changes the member has staged but not yet saved. They are applied
+  // only when the daily update is submitted (see handleSubmit), so every change
+  // is recorded alongside that day's log. Keyed by commitment id.
+  const [pendingCommit, setPendingCommit] = useState<Record<string, PendingCommit>>({})
   const [workload, setWorkload] = useState<Workload>('medium')
   const [submitting, setSubmitting] = useState(false)
   const [absentMode, setAbsentMode] = useState(false)
@@ -563,37 +649,44 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
     setTasks(prev => prev.map((t, idx) => idx === i ? { ...t, attachments: (t.attachments || []).filter((_, j) => j !== ai) } : t))
   }
 
-  async function resolvePromise(id: string, action: ResolveAction, note: string) {
-    // Partial and Carry Forward both roll the task forward (status stays open);
-    // Partial marks that some progress was made. Completed closes it. Cancel
-    // closes it as cancelled (the plan changed or was dropped).
-    let body: Record<string, unknown>
-    if (action === 'done') {
-      body = { id, status: 'done', outcome_note: note }
-    } else if (action === 'partial') {
-      body = { id, action: 'carry', outcome_note: note.trim() ? `Partial: ${note.trim()}` : 'Partial progress' }
-    } else if (action === 'cancel') {
-      body = { id, status: 'cancelled', outcome_note: note.trim() ? `Cancelled: ${note.trim()}` : 'Cancelled' }
-    } else {
-      body = { id, action: 'carry', outcome_note: note }
-    }
-    const res = await fetch('/api/commitments', {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
-    })
-    if (!res.ok) { const d = await res.json(); showError(d.error || 'Failed to update commitment.'); return }
-    const d = await res.json()
-    setCommitments(prev => prev.map(c => c.id === id ? d.commitment : c))
-    sendNudge('employee_changed', { employeeId: session.id, kind: 'commitment' })
+  // Stage a commitment change instead of saving it now. If today's update is
+  // already submitted, reopen it for editing so there is a submit to apply on —
+  // the change is committed together with the daily log in handleSubmit.
+  function stageCommit(id: string, action: CommitAction, payload: { note?: string; text?: string; reason?: string }) {
+    if (todayEntry && !editMode) startEdit()
+    setPendingCommit(prev => ({ ...prev, [id]: { action, note: payload.note || '', text: payload.text, reason: payload.reason } }))
   }
 
-  async function editPromise(id: string, text: string) {
-    const res = await fetch('/api/commitments', {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, action: 'edit', text })
+  function unstageCommit(id: string) {
+    setPendingCommit(prev => {
+      const next = { ...prev }
+      delete next[id]
+      return next
     })
-    if (!res.ok) { const d = await res.json(); showError(d.error || 'Failed to update commitment.'); return }
-    const d = await res.json()
-    setCommitments(prev => prev.map(c => c.id === id ? d.commitment : c))
-    sendNudge('employee_changed', { employeeId: session.id, kind: 'commitment' })
+  }
+
+  // Applies every staged commitment change via the commitments API. Runs as part
+  // of a daily-log submit. Returns false (and surfaces an error) on first failure.
+  async function applyStagedCommits(): Promise<boolean> {
+    for (const [id, p] of Object.entries(pendingCommit)) {
+      let body: Record<string, unknown>
+      if (p.action === 'edit') {
+        body = { id, action: 'edit', text: p.text, outcome_note: p.reason }
+      } else if (p.action === 'done') {
+        body = { id, status: 'done', outcome_note: p.note }
+      } else if (p.action === 'partial') {
+        body = { id, action: 'carry', outcome_note: p.note.trim() ? `Partial: ${p.note.trim()}` : 'Partial progress' }
+      } else if (p.action === 'cancel') {
+        body = { id, status: 'cancelled', outcome_note: p.note.trim() ? `Cancelled: ${p.note.trim()}` : 'Cancelled' }
+      } else {
+        body = { id, action: 'carry', outcome_note: p.note }
+      }
+      const res = await fetch('/api/commitments', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+      })
+      if (!res.ok) { const d = await res.json(); showError(d.error || 'Failed to update commitment.'); return false }
+    }
+    return true
   }
 
   const today = TODAY()
@@ -612,7 +705,20 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
   // completing one mid-week (then it targets this week's Saturday). Skipped when
   // a carried weekly is still open, or when the first login of the week is Saturday.
   const thisWeekSat = weekSaturday(today)
-  const needWeekly = !hasOpenWeekly && dayOfWeek(today) !== 6
+  // A staged Complete or Cancel will close that weekly on submit, so it no longer
+  // counts as "open" for the purpose of requiring a replacement.
+  const willCloseWeekly = (id: string) => {
+    const p = pendingCommit[id]
+    return p?.action === 'done' || p?.action === 'cancel'
+  }
+  const remainingOpenWeekly = openWeekly.filter(c => !willCloseWeekly(c.id))
+  // True when the new weekly is a replacement for one the member just staged to
+  // complete or cancel (vs. the first weekly of the week) — used to tailor copy.
+  const replacingWeekly = openWeekly.some(c => willCloseWeekly(c.id))
+  // A new weekly commitment is required when none will remain open after this
+  // submit (first login of the week, or after completing/cancelling the current
+  // one), except on Saturday — the last day of the week.
+  const needWeekly = remainingOpenWeekly.length === 0 && dayOfWeek(today) !== 6
 
   async function handleSubmit() {
     const validTasks = tasks.filter(t => t.task.trim())
@@ -620,8 +726,8 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
     if (validTasks.some(t => !(t.what_changed || '').trim())) {
       showError('Fill in "What changed since yesterday?" for every task.'); return
     }
-    if (!editMode && needWeekly && !weeklyPromise.trim()) {
-      showError('You have no active weekly commitment — add one for this week.'); return
+    if (needWeekly && !weeklyPromise.trim()) {
+      showError('You need a weekly commitment for this week — add one below.'); return
     }
 
     setSubmitting(true); setError('')
@@ -641,19 +747,23 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
         if (!res.ok) { const d = await res.json(); showError(d.error || 'Submission failed.'); return }
         const d = await res.json()
         entryId = d.entry?.id
-
-        // Record this week's commitment — the single, non-blocking promise the
-        // app follows up on. Only created when a new weekly one is needed.
-        if (needWeekly && weeklyPromise.trim()) {
-          const cRes = await fetch('/api/commitments', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ commitments: [{ text: weeklyPromise, horizon: 'week', due_date: thisWeekSat, project_id: null, created_in_entry_id: entryId ?? null }] })
-          })
-          if (!cRes.ok) { const d2 = await cRes.json(); showError(d2.error || 'Saving commitment failed.'); return }
-        }
       }
+
+      // The day's log is saved — now apply any staged commitment changes
+      // (Complete/Partial/Carry/Edit/Cancel), then create the new/replacement
+      // weekly commitment if one is needed. Close/cancel runs before the new one.
+      if (!(await applyStagedCommits())) return
+      if (needWeekly && weeklyPromise.trim()) {
+        const cRes = await fetch('/api/commitments', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ commitments: [{ text: weeklyPromise, horizon: 'week', due_date: thisWeekSat, project_id: null, created_in_entry_id: entryId ?? null }] })
+        })
+        if (!cRes.ok) { const d2 = await cRes.json(); showError(d2.error || 'Saving commitment failed.'); return }
+      }
+
       setEditMode(false)
       setWeeklyPromise('')
+      setPendingCommit({})
       pendingRefresh.current = false
       await fetchData()
       // Nudge the manager's dashboard to refresh with this submission/edit.
@@ -764,10 +874,11 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
               <FollowUpCard
                 promises={openWeekly}
                 projects={projects}
-                onResolve={resolvePromise}
-                onEdit={editPromise}
+                pending={pendingCommit}
+                onStage={stageCommit}
+                onUnstage={unstageCommit}
                 title="Your weekly commitment"
-                subtitle="A reminder that stays until you complete it. Use Edit if the plan changed, or Cancel if it's no longer relevant — this never blocks your daily update."
+                subtitle="A reminder that stays until you complete it. Any change — Complete, Partial, Carry, Edit, or Cancel — is saved when you submit your daily update below. This never blocks your update."
                 accent="#4b3e9d"
                 deadline={weeklyDeadline}
               />
@@ -862,7 +973,7 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: 13, fontWeight: 400, color: '#AEAEB2' }}>{myProj.length} project{myProj.length !== 1 ? 's' : ''}</span>
-                    {editMode && <button className="btn btn-secondary btn-sm" onClick={() => setEditMode(false)}>Cancel</button>}
+                    {editMode && <button className="btn btn-secondary btn-sm" onClick={() => { setEditMode(false); setPendingCommit({}); setWeeklyPromise('') }}>Cancel</button>}
                   </div>
                 </div>
 
@@ -1046,18 +1157,22 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
                   </button>
                 </div>
 
-                {/* Step 2: Commit — this week's commitment (new submissions only,
-                    shown once per week until a weekly commitment is open) */}
-                {!editMode && needWeekly && (
+                {/* Step 2: Commit — this week's commitment. Shown whenever no weekly
+                    will remain open after this submit: first login of the week, or
+                    after staging a Complete/Cancel on the current one (a replacement
+                    is then required before submitting). */}
+                {needWeekly && (
                   <div style={{ marginBottom: 20, background: 'rgba(75,62,157,0.04)', border: '1px solid rgba(75,62,157,0.18)', borderRadius: 12, padding: '16px 16px 12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 2, flexWrap: 'wrap' }}>
                       <div style={{ fontWeight: 700, fontSize: 14, letterSpacing: '-0.01em', color: '#2b2f6b' }}>
-                        Step 2 · Weekly commitment
+                        {replacingWeekly ? 'New weekly commitment' : 'Step 2 · Weekly commitment'}
                       </div>
                       <span style={DUE_PILL}>Due {fmtDue(thisWeekSat)}</span>
                     </div>
                     <div style={{ fontSize: 12, color: '#6E6E73', marginBottom: 12 }}>
-                      What will you accomplish by <strong>{fmtDue(thisWeekSat)}</strong>? This is your one promise for the week — the app follows up on it, and it never blocks your daily update.
+                      {replacingWeekly
+                        ? <>You&apos;re closing your current weekly commitment — set the one that replaces it by <strong>{fmtDue(thisWeekSat)}</strong>. Required before you can submit.</>
+                        : <>What will you accomplish by <strong>{fmtDue(thisWeekSat)}</strong>? This is your one promise for the week — the app follows up on it, and it never blocks your daily update.</>}
                     </div>
                     <textarea
                       value={weeklyPromise}

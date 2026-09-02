@@ -93,7 +93,7 @@ export async function PATCH(req: NextRequest) {
 
   const admin = supabaseAdmin()
   const { data: existing } = await admin.from('commitments')
-    .select('employee_id, status, carry_count, due_date, horizon').eq('id', id).single()
+    .select('employee_id, status, carry_count, due_date, horizon, text, outcome_note').eq('id', id).single()
   if (!existing) return NextResponse.json({ error: 'Commitment not found' }, { status: 404 })
   if (role !== 'manager' && existing.employee_id !== userId) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -103,13 +103,22 @@ export async function PATCH(req: NextRequest) {
   if (action === 'edit') {
     // Change the wording of a still-open commitment (the plan changed). Only an
     // open commitment can be edited; status and due date are left untouched.
+    // A comment is required, and we log the previous wording so the change is
+    // recorded as "was ... → now ... — reason".
     if (existing.status !== 'open') {
       return NextResponse.json({ error: 'Only open commitments can be edited' }, { status: 400 })
     }
     if (!text?.trim()) {
       return NextResponse.json({ error: 'Commitment text is required' }, { status: 400 })
     }
-    updates = { text: String(text).slice(0, 2000) }
+    if (!outcome_note?.trim()) {
+      return NextResponse.json({ error: 'A comment describing the change is required' }, { status: 400 })
+    }
+    const oldText = (existing.text || '').trim()
+    const newText = String(text).slice(0, 2000)
+    const entry = `[${todayIST()}] Edited: "${oldText}" -> "${newText.trim()}" - ${String(outcome_note).trim()}`
+    const combined = existing.outcome_note ? `${existing.outcome_note}\n${entry}` : entry
+    updates = { text: newText, outcome_note: combined.slice(0, 4000) }
   } else if (action === 'carry') {
     if (existing.status !== 'open') {
       return NextResponse.json({ error: 'Only open commitments can be carried' }, { status: 400 })
@@ -122,6 +131,9 @@ export async function PATCH(req: NextRequest) {
       outcome_note: outcome_note ? String(outcome_note).slice(0, 2000) : null,
     }
   } else if (RESOLVE_STATUSES.includes(status)) {
+    if (status === 'cancelled' && !outcome_note?.trim()) {
+      return NextResponse.json({ error: 'A reason for cancelling is required' }, { status: 400 })
+    }
     updates = {
       status,
       outcome_note: outcome_note ? String(outcome_note).slice(0, 2000) : null,
