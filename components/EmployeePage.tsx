@@ -21,11 +21,13 @@ const WL: Record<Workload, { label: string; color: string; bg: string }> = {
 
 // Resolution actions on a follow-up. "Completed" closes the commitment; "Partial"
 // and "Carry Forward" both roll it forward and keep it open (Partial = some
-// progress made, Carry Forward = none). There is no "Missed" outcome.
+// progress made, Carry Forward = none). "Cancel" closes it as cancelled — the
+// plan changed or was dropped, and it is not counted as a broken promise.
 const RESOLVE_ACTIONS = [
   { id: 'done' as const,    label: 'Completed',     color: '#34C759', solid: true },
   { id: 'partial' as const, label: 'Partial',       color: '#FF9500', solid: false },
   { id: 'carry' as const,   label: 'Carry Forward', color: '#6E6E73', solid: false },
+  { id: 'cancel' as const,  label: 'Cancel',        color: '#FF3B30', solid: false },
 ]
 type ResolveAction = (typeof RESOLVE_ACTIONS)[number]['id']
 
@@ -175,10 +177,13 @@ function ManagerNotes({ comments }: { comments: Comment[] }) {
 }
 
 // ── Follow-up card: resolve the open weekly commitment (non-blocking reminder) ─
-function FollowUpCard({ promises, projects, onResolve, title, subtitle, accent = '#4b3e9d', deadline }: {
+function FollowUpCard({ promises, projects, onResolve, onEdit, title, subtitle, accent = '#4b3e9d', deadline }: {
   promises: Commitment[]
   projects: Project[]
   onResolve: (id: string, action: ResolveAction, note: string) => Promise<void>
+  // When provided, an "Edit" action lets the user reword a still-open commitment
+  // (the plan changed) without closing it.
+  onEdit?: (id: string, text: string) => Promise<void>
   title: string
   subtitle: string
   accent?: string
@@ -188,10 +193,23 @@ function FollowUpCard({ promises, projects, onResolve, title, subtitle, accent =
 }) {
   const [notes, setNotes] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState<string | null>(null)
+  // Id of the commitment currently being reworded, plus its draft text.
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editDraft, setEditDraft] = useState('')
 
   async function act(id: string, action: ResolveAction) {
     setBusy(id)
     try { await onResolve(id, action, notes[id] || '') } finally { setBusy(null) }
+  }
+
+  async function saveEdit(id: string) {
+    if (!onEdit || !editDraft.trim()) return
+    setBusy(id)
+    try {
+      await onEdit(id, editDraft.trim())
+      setEditingId(null)
+      setEditDraft('')
+    } finally { setBusy(null) }
   }
 
   return (
@@ -221,22 +239,53 @@ function FollowUpCard({ promises, projects, onResolve, title, subtitle, accent =
               )}
               <span style={{ fontSize: 11.5, fontWeight: 700, color: accent, marginLeft: 'auto' }}>{c.horizon === 'week' ? 'Complete by' : 'Due'} {fmtDue(c.due_date)}</span>
             </div>
-            <div style={{ fontSize: 14, color: '#1D1D1F', lineHeight: 1.5, marginBottom: 10 }}>{c.text}</div>
-            <input
-              type="text"
-              value={notes[c.id] || ''}
-              onChange={e => setNotes(prev => ({ ...prev, [c.id]: e.target.value }))}
-              placeholder="Optional note on the outcome…"
-              style={{ width: '100%', padding: '7px 10px', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 8, fontSize: 13, fontFamily: FONT, outline: 'none', background: 'white', boxSizing: 'border-box', marginBottom: 8, boxShadow: 'none' }}
-            />
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {RESOLVE_ACTIONS.map(a => (
-                <button key={a.id} disabled={busy === c.id} onClick={() => act(c.id, a.id)}
-                  style={{ padding: '6px 14px', borderRadius: 980, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, border: `1.5px solid ${a.color}${a.solid ? '' : '80'}`, background: a.solid ? a.color : a.color + '12', color: a.solid ? 'white' : a.color, opacity: busy === c.id ? 0.5 : 1 }}>
-                  {c.horizon === 'week' && a.id === 'carry' ? 'Carry to next week' : a.label}
-                </button>
-              ))}
-            </div>
+            {editingId === c.id ? (
+              <div>
+                <textarea
+                  value={editDraft}
+                  onChange={e => setEditDraft(e.target.value)}
+                  rows={2}
+                  autoFocus
+                  placeholder="Update your commitment…"
+                  style={{ width: '100%', padding: '8px 10px', border: `1px solid ${accent}55`, borderRadius: 8, fontSize: 14, fontFamily: FONT, outline: 'none', resize: 'none', background: 'white', boxSizing: 'border-box', lineHeight: 1.5, marginBottom: 8, boxShadow: 'none' }}
+                />
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <button disabled={busy === c.id || !editDraft.trim()} onClick={() => saveEdit(c.id)}
+                    style={{ padding: '6px 14px', borderRadius: 980, fontSize: 12, fontWeight: 600, cursor: editDraft.trim() ? 'pointer' : 'not-allowed', fontFamily: FONT, border: 'none', background: accent, color: 'white', opacity: (busy === c.id || !editDraft.trim()) ? 0.5 : 1 }}>
+                    Save changes
+                  </button>
+                  <button disabled={busy === c.id} onClick={() => { setEditingId(null); setEditDraft('') }}
+                    style={{ padding: '6px 14px', borderRadius: 980, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, border: '1.5px solid rgba(0,0,0,0.15)', background: 'white', color: '#6E6E73' }}>
+                    Cancel edit
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div style={{ fontSize: 14, color: '#1D1D1F', lineHeight: 1.5, marginBottom: 10 }}>{c.text}</div>
+                <input
+                  type="text"
+                  value={notes[c.id] || ''}
+                  onChange={e => setNotes(prev => ({ ...prev, [c.id]: e.target.value }))}
+                  placeholder="Optional note on the outcome…"
+                  style={{ width: '100%', padding: '7px 10px', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 8, fontSize: 13, fontFamily: FONT, outline: 'none', background: 'white', boxSizing: 'border-box', marginBottom: 8, boxShadow: 'none' }}
+                />
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {RESOLVE_ACTIONS.map(a => (
+                    <button key={a.id} disabled={busy === c.id} onClick={() => act(c.id, a.id)}
+                      style={{ padding: '6px 14px', borderRadius: 980, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, border: `1.5px solid ${a.color}${a.solid ? '' : '80'}`, background: a.solid ? a.color : a.color + '12', color: a.solid ? 'white' : a.color, opacity: busy === c.id ? 0.5 : 1 }}>
+                      {c.horizon === 'week' && a.id === 'carry' ? 'Carry to next week' : a.label}
+                    </button>
+                  ))}
+                  {onEdit && (
+                    <button disabled={busy === c.id} onClick={() => { setEditingId(c.id); setEditDraft(c.text) }}
+                      style={{ padding: '6px 14px', borderRadius: 980, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, border: `1.5px solid ${accent}80`, background: accent + '12', color: accent, opacity: busy === c.id ? 0.5 : 1 }}>
+                      Edit
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         )
       })}
@@ -253,6 +302,7 @@ function MyStats({ entries, projects, commitments }: { entries: Entry[]; project
   // are still in flight and excluded until finished.
   const completedC = commitments.filter(c => c.status === 'done')
   const openC = commitments.filter(c => c.status === 'open')
+  const cancelledC = commitments.filter(c => c.status === 'cancelled')
   const onTime = completedC.filter(c => (c.carry_count || 0) === 0).length
   const reliability = completedC.length ? Math.round(onTime / completedC.length * 100) : null
 
@@ -289,15 +339,16 @@ function MyStats({ entries, projects, commitments }: { entries: Entry[]; project
       </div>
 
       {/* Commitment outcomes */}
-      {(completedC.length > 0 || openC.length > 0) && (
+      {(completedC.length > 0 || openC.length > 0 || cancelledC.length > 0) && (
         <div style={{ ...CARD, padding: '20px 24px', marginBottom: 16 }}>
           <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4, letterSpacing: '-0.02em' }}>Commitment Outcomes (last 30 days)</div>
-          <div style={{ fontSize: 12, color: '#AEAEB2', marginBottom: 14 }}>On-time = completed without ever carrying forward — your headline accountability number.</div>
+          <div style={{ fontSize: 12, color: '#AEAEB2', marginBottom: 14 }}>On-time = completed without ever carrying forward — your headline accountability number. Cancelled goals don&apos;t count against you.</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {[
               { label: 'Completed', color: '#34C759', count: completedC.length },
               { label: 'On-time', color: '#4b3e9d', count: onTime },
               { label: 'In progress', color: '#FF9500', count: openC.length },
+              ...(cancelledC.length > 0 ? [{ label: 'Cancelled', color: '#8E8E93', count: cancelledC.length }] : []),
             ].map(k => (
               <div key={k.label} style={{ flex: '1 0 calc(33% - 6px)', background: k.color + '12', borderRadius: 12, padding: '12px 14px', textAlign: 'center' }}>
                 <div style={{ fontSize: 22, fontWeight: 700, color: k.color, letterSpacing: '-0.03em' }}>{k.count}</div>
@@ -514,17 +565,30 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
 
   async function resolvePromise(id: string, action: ResolveAction, note: string) {
     // Partial and Carry Forward both roll the task forward (status stays open);
-    // Partial marks that some progress was made. Completed closes it.
+    // Partial marks that some progress was made. Completed closes it. Cancel
+    // closes it as cancelled (the plan changed or was dropped).
     let body: Record<string, unknown>
     if (action === 'done') {
       body = { id, status: 'done', outcome_note: note }
     } else if (action === 'partial') {
       body = { id, action: 'carry', outcome_note: note.trim() ? `Partial: ${note.trim()}` : 'Partial progress' }
+    } else if (action === 'cancel') {
+      body = { id, status: 'cancelled', outcome_note: note.trim() ? `Cancelled: ${note.trim()}` : 'Cancelled' }
     } else {
       body = { id, action: 'carry', outcome_note: note }
     }
     const res = await fetch('/api/commitments', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    })
+    if (!res.ok) { const d = await res.json(); showError(d.error || 'Failed to update commitment.'); return }
+    const d = await res.json()
+    setCommitments(prev => prev.map(c => c.id === id ? d.commitment : c))
+    sendNudge('employee_changed', { employeeId: session.id, kind: 'commitment' })
+  }
+
+  async function editPromise(id: string, text: string) {
+    const res = await fetch('/api/commitments', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, action: 'edit', text })
     })
     if (!res.ok) { const d = await res.json(); showError(d.error || 'Failed to update commitment.'); return }
     const d = await res.json()
@@ -701,8 +765,9 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
                 promises={openWeekly}
                 projects={projects}
                 onResolve={resolvePromise}
+                onEdit={editPromise}
                 title="Your weekly commitment"
-                subtitle="A reminder that stays until you complete it. Update it whenever you make progress — this never blocks your daily update."
+                subtitle="A reminder that stays until you complete it. Use Edit if the plan changed, or Cancel if it's no longer relevant — this never blocks your daily update."
                 accent="#4b3e9d"
                 deadline={weeklyDeadline}
               />

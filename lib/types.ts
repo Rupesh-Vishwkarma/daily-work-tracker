@@ -30,7 +30,7 @@ export interface ProjectTask {
 }
 
 export type CommitmentHorizon = 'day' | 'week'
-export type CommitmentStatus = 'open' | 'done' | 'partial' | 'missed'
+export type CommitmentStatus = 'open' | 'done' | 'partial' | 'missed' | 'cancelled'
 
 export interface Commitment {
   id: string

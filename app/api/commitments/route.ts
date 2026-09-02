@@ -3,9 +3,11 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { todayIST, nextWorkingDay, nextWeekSaturday } from '@/lib/dates'
 
 const HORIZONS = ['day', 'week']
-// Completed is the only closing outcome now; Partial / Carry Forward both roll a
-// task forward via the 'carry' action (kept 'partial'/'missed' accepted for old rows).
-const RESOLVE_STATUSES = ['done', 'partial', 'missed']
+// Completed ('done') and Cancelled ('cancelled') are the closing outcomes; Partial
+// / Carry Forward both roll a commitment forward via the 'carry' action ('partial'
+// / 'missed' remain accepted for old rows). 'cancelled' = the plan changed or was
+// dropped, and is excluded from delivery/reliability metrics.
+const RESOLVE_STATUSES = ['done', 'partial', 'missed', 'cancelled']
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -83,7 +85,7 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   const body = await req.json()
-  const { id, action, status, outcome_note } = body
+  const { id, action, status, outcome_note, text } = body
   if (!id) return NextResponse.json({ error: 'Missing commitment id' }, { status: 400 })
 
   const role = req.headers.get('x-user-role')
@@ -98,7 +100,17 @@ export async function PATCH(req: NextRequest) {
   }
 
   let updates: Record<string, unknown>
-  if (action === 'carry') {
+  if (action === 'edit') {
+    // Change the wording of a still-open commitment (the plan changed). Only an
+    // open commitment can be edited; status and due date are left untouched.
+    if (existing.status !== 'open') {
+      return NextResponse.json({ error: 'Only open commitments can be edited' }, { status: 400 })
+    }
+    if (!text?.trim()) {
+      return NextResponse.json({ error: 'Commitment text is required' }, { status: 400 })
+    }
+    updates = { text: String(text).slice(0, 2000) }
+  } else if (action === 'carry') {
     if (existing.status !== 'open') {
       return NextResponse.json({ error: 'Only open commitments can be carried' }, { status: 400 })
     }

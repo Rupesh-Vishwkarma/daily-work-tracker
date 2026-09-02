@@ -6,12 +6,14 @@ import { todayIST } from '@/lib/dates'
 import { useNudge } from '@/lib/realtime'
 
 // 'open' commitments are in progress (possibly carried); 'done' is completed.
+// 'cancelled' = the plan changed or was dropped (not a broken promise).
 // 'partial'/'missed' remain only so any pre-existing rows still render.
 const OUTCOME: Record<string, { label: string; color: string }> = {
-  open:    { label: 'In progress', color: '#33398a' },
-  done:    { label: 'Completed',   color: '#34C759' },
-  partial: { label: 'Partial',     color: '#FF9500' },
-  missed:  { label: 'Missed',      color: '#FF3B30' },
+  open:      { label: 'In progress', color: '#33398a' },
+  done:      { label: 'Completed',   color: '#34C759' },
+  partial:   { label: 'Partial',     color: '#FF9500' },
+  missed:    { label: 'Missed',      color: '#FF3B30' },
+  cancelled: { label: 'Cancelled',   color: '#8E8E93' },
 }
 
 const PERIODS = [
@@ -67,7 +69,7 @@ export default function CommitmentsTab() {
     const onTime = completed.filter(c => (c.carry_count || 0) === 0).length
     return {
       employee: emp,
-      promised: mine.length,
+      promised: mine.filter(c => c.status !== 'cancelled').length,
       delivered: completed.length,
       open: mine.filter(c => c.status === 'open').length,
       reliability: completed.length ? Math.round(onTime / completed.length * 100) : null,
@@ -105,7 +107,7 @@ export default function CommitmentsTab() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 10, marginBottom: 16 }}>
         {[
           { v: teamReliability !== null ? teamReliability + '%' : '—', l: 'On-time Delivery', c: '#4b3e9d' },
-          { v: commitments.length, l: 'Commitments Made', c: '#33398a' },
+          { v: commitments.filter(c => c.status !== 'cancelled').length, l: 'Commitments Made', c: '#33398a' },
           { v: completedAll.length, l: 'Completed', c: '#34C759' },
           { v: openOverdue, l: 'Due / Overdue', c: '#FF9500' },
           { v: allStalled.length, l: 'Stalled (3+ carries)', c: '#FF3B30' },
