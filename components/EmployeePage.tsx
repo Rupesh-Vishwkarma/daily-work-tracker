@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useRef, type MouseEvent as ReactMouseEvent } from 'react'
 import { Session, Entry, Project, ProjectTask, TaskStatus, Workload, Comment, Commitment, Attachment } from '@/lib/types'
 import { FONT, CARD, fmtDate as FMT_DATE } from '@/lib/ui'
-import { todayIST, nextWorkingDay, weekSaturday, dayOfWeek } from '@/lib/dates'
+import { todayIST, weekSaturday, dayOfWeek } from '@/lib/dates'
 import { uploadAttachment } from '@/lib/upload'
 import { useNudge, sendNudge } from '@/lib/realtime'
 
@@ -61,18 +61,8 @@ interface LocalTask extends ProjectTask {
   linkDraft?: string
 }
 
-interface LocalPromise {
-  uid: number
-  text: string
-  project_id: string
-}
-
 function mkTask(): LocalTask {
   return { uid: Date.now() + Math.random(), project_id: '', task: '', time: '', status: 'in_progress', blockers: '', what_changed: '', attachments: [], showBlockers: false, showLink: false, linkDraft: '' }
-}
-
-function mkPromise(): LocalPromise {
-  return { uid: Date.now() + Math.random(), text: '', project_id: '' }
 }
 
 function toLocalTask(t: ProjectTask): LocalTask {
@@ -184,7 +174,7 @@ function ManagerNotes({ comments }: { comments: Comment[] }) {
   )
 }
 
-// ── Follow-up card: resolve open commitments (daily block + weekly reminder) ───
+// ── Follow-up card: resolve the open weekly commitment (non-blocking reminder) ─
 function FollowUpCard({ promises, projects, onResolve, title, subtitle, accent = '#4b3e9d', deadline }: {
   promises: Commitment[]
   projects: Project[]
@@ -394,7 +384,6 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
   const [loading, setLoading] = useState(true)
   const [editMode, setEditMode] = useState(false)
   const [tasks, setTasks] = useState<LocalTask[]>([mkTask()])
-  const [promises, setPromises] = useState<LocalPromise[]>([mkPromise()])
   const [weeklyPromise, setWeeklyPromise] = useState('')
   const [workload, setWorkload] = useState<Workload>('medium')
   const [submitting, setSubmitting] = useState(false)
@@ -544,10 +533,7 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
   }
 
   const today = TODAY()
-  const nextDay = nextWorkingDay(today)
 
-  // Only DAILY commitments block submission (due today or earlier must be resolved).
-  const openDailyFollowUps = commitments.filter(c => c.status === 'open' && c.horizon === 'day' && c.due_date <= today)
   // A carried/open weekly commitment is a persistent, NON-blocking reminder shown
   // every day until Completed.
   const openWeekly = commitments.filter(c => c.status === 'open' && c.horizon === 'week')
@@ -555,9 +541,6 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
   // Earliest due date among open weekly commitments — surfaced as the "Complete by"
   // deadline in the reminder card header.
   const weeklyDeadline = openWeekly.reduce<string>((min, c) => (min && min <= c.due_date ? min : c.due_date), '')
-  // A new daily commitment is optional if one is already committed for the next
-  // day (e.g. today's task was carried forward — it now serves as tomorrow's goal).
-  const hasNextDayDaily = commitments.some(c => c.status === 'open' && c.horizon === 'day' && c.due_date >= nextDay)
 
   // The week runs Sun–Sat (Sunday non-working, so the first login is normally
   // Monday). Rule: always have exactly one open weekly commitment. A new weekly
@@ -572,13 +555,6 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
     if (validTasks.length === 0) { showError('Add at least one task.'); return }
     if (validTasks.some(t => !(t.what_changed || '').trim())) {
       showError('Fill in "What changed since yesterday?" for every task.'); return
-    }
-    if (openDailyFollowUps.length > 0) {
-      showError('Close out your open daily commitments above before submitting.'); return
-    }
-    const validPromises = promises.filter(p => p.text.trim())
-    if (!editMode && validPromises.length === 0 && !hasNextDayDaily) {
-      showError("Add at least one commitment for tomorrow — what will you accomplish?"); return
     }
     if (!editMode && needWeekly && !weeklyPromise.trim()) {
       showError('You have no active weekly commitment — add one for this week.'); return
@@ -602,24 +578,17 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
         const d = await res.json()
         entryId = d.entry?.id
 
-        // Step 3: record tomorrow's (and the week's) promises.
-        const rows: { text: string; horizon: string; due_date: string; project_id: string | null; created_in_entry_id: string | null }[] = validPromises.map(p => ({
-          text: p.text, horizon: 'day', due_date: nextDay,
-          project_id: p.project_id || null, created_in_entry_id: entryId ?? null,
-        }))
+        // Record this week's commitment — the single, non-blocking promise the
+        // app follows up on. Only created when a new weekly one is needed.
         if (needWeekly && weeklyPromise.trim()) {
-          rows.push({ text: weeklyPromise, horizon: 'week', due_date: thisWeekSat, project_id: null, created_in_entry_id: entryId ?? null })
-        }
-        if (rows.length > 0) {
           const cRes = await fetch('/api/commitments', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ commitments: rows })
+            body: JSON.stringify({ commitments: [{ text: weeklyPromise, horizon: 'week', due_date: thisWeekSat, project_id: null, created_in_entry_id: entryId ?? null }] })
           })
-          if (!cRes.ok) { const d2 = await cRes.json(); showError(d2.error || 'Saving commitments failed.'); return }
+          if (!cRes.ok) { const d2 = await cRes.json(); showError(d2.error || 'Saving commitment failed.'); return }
         }
       }
       setEditMode(false)
-      setPromises([mkPromise()])
       setWeeklyPromise('')
       pendingRefresh.current = false
       await fetchData()
@@ -662,7 +631,6 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
   const hasSubmitted = !!todayEntry && !editMode
   const myProj = projects.filter(p => p.status === 'active' && (p.members?.includes(session.id) || p.lead === session.id))
   const otherProj = projects.filter(p => p.status === 'active' && !p.members?.includes(session.id) && p.lead !== session.id)
-  const tomorrowsPromises = commitments.filter(c => c.status === 'open' && c.horizon === 'day' && c.due_date > today)
 
   return (
     <div style={{ minHeight: '100vh', fontFamily: FONT }}>
@@ -779,17 +747,6 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
               )
             )}
 
-            {/* Step 1: follow-up on open daily commitments (must be resolved to submit) */}
-            {!hasSubmitted && !absentMode && openDailyFollowUps.length > 0 && (
-              <FollowUpCard
-                promises={openDailyFollowUps}
-                projects={projects}
-                onResolve={resolvePromise}
-                title="Step 1 · Follow up on your commitments"
-                subtitle="Close these out before submitting today's update."
-              />
-            )}
-
             {/* Submitted state */}
             {hasSubmitted && (
               <div>
@@ -827,26 +784,6 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
                   </>
                 )}
                 <ManagerNotes comments={commentsMap[todayEntry.id] || []} />
-
-                {/* Promises made for tomorrow / this week */}
-                {tomorrowsPromises.length > 0 && (
-                  <div style={{ ...CARD, padding: '16px 20px', marginTop: 16 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: '#4b3e9d', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Your open commitments</div>
-                    {tomorrowsPromises.map(c => {
-                      const proj = projects.find(p => p.id === c.project_id)
-                      return (
-                        <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid rgba(0,0,0,0.04)', flexWrap: 'wrap' }}>
-                          <span style={{ padding: '2px 8px', borderRadius: 980, fontSize: 10, fontWeight: 700, background: c.horizon === 'week' ? 'rgba(75,62,157,0.12)' : 'rgba(51,57,138,0.1)', color: c.horizon === 'week' ? '#4b3e9d' : '#33398a', flexShrink: 0 }}>
-                            {c.horizon === 'week' ? 'WEEK' : 'DAY'}
-                          </span>
-                          <span style={{ fontSize: 13, color: '#1D1D1F', flex: 1, minWidth: 150 }}>{c.text}</span>
-                          {projectPill(proj, c.project_id === '__other__')}
-                          <span style={{ fontSize: 11, color: '#AEAEB2' }}>due {FMT_DATE(c.due_date)}</span>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
               </div>
             )}
 
@@ -855,7 +792,7 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
               <div style={{ ...CARD, padding: 24 }}>
                 <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', letterSpacing: '-0.02em' }}>
                   <div>
-                    <span>{editMode ? "Update Today's Work" : `Step ${openDailyFollowUps.length > 0 ? '2' : '1'} · Today's Work`}</span>
+                    <span>{editMode ? "Update Today's Work" : "Step 1 · Today's Work"}</span>
                     <div style={{ fontSize: 13, fontWeight: 400, color: '#AEAEB2', marginTop: 2 }}>{FMT_DATE(today)}</div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1044,69 +981,26 @@ export default function EmployeePage({ session, onLogout }: { session: Session; 
                   </button>
                 </div>
 
-                {/* Step 3: Commit — promises for tomorrow (new submissions only) */}
-                {!editMode && (
+                {/* Step 2: Commit — this week's commitment (new submissions only,
+                    shown once per week until a weekly commitment is open) */}
+                {!editMode && needWeekly && (
                   <div style={{ marginBottom: 20, background: 'rgba(75,62,157,0.04)', border: '1px solid rgba(75,62,157,0.18)', borderRadius: 12, padding: '16px 16px 12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 2, flexWrap: 'wrap' }}>
                       <div style={{ fontWeight: 700, fontSize: 14, letterSpacing: '-0.01em', color: '#2b2f6b' }}>
-                        Step {openDailyFollowUps.length > 0 ? '3' : '2'} · Commit
+                        Step 2 · Weekly commitment
                       </div>
-                      <span style={DUE_PILL}>Due {fmtDue(nextDay)}</span>
+                      <span style={DUE_PILL}>Due {fmtDue(thisWeekSat)}</span>
                     </div>
                     <div style={{ fontSize: 12, color: '#6E6E73', marginBottom: 12 }}>
-                      {hasNextDayDaily
-                        ? <>You&apos;ve carried a task to <strong>{fmtDue(nextDay)}</strong> — a new commitment is optional. Add another if you like.</>
-                        : <>What will you accomplish by <strong>{fmtDue(nextDay)}</strong>? (your next working day — followed up then)</>}
+                      What will you accomplish by <strong>{fmtDue(thisWeekSat)}</strong>? This is your one promise for the week — the app follows up on it, and it never blocks your daily update.
                     </div>
-                    {promises.map((p, idx) => {
-                      const proj = projects.find(pr => pr.id === p.project_id)
-                      return (
-                        <div key={p.uid} style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                          <input
-                            type="text"
-                            value={p.text}
-                            onChange={e => setPromises(prev => prev.map((x, i) => i === idx ? { ...x, text: e.target.value } : x))}
-                            placeholder={`Commitment ${idx + 1} — what will be done?`}
-                            style={{ flex: 1, minWidth: 180, padding: '8px 10px', border: '1px solid rgba(75,62,157,0.25)', borderRadius: 8, fontSize: 13, fontFamily: FONT, outline: 'none', background: 'white', boxSizing: 'border-box', boxShadow: 'none' }}
-                          />
-                          <select
-                            value={p.project_id}
-                            onChange={e => setPromises(prev => prev.map((x, i) => i === idx ? { ...x, project_id: e.target.value } : x))}
-                            style={{ width: 'auto', padding: '6px 22px 6px 8px', fontSize: 12, borderRadius: 8, border: '1px solid rgba(0,0,0,0.1)', backgroundColor: proj ? proj.color + '12' : 'white', color: proj?.color || '#6E6E73', fontFamily: FONT, outline: 'none', fontWeight: 600, cursor: 'pointer', maxWidth: 140, appearance: 'none', WebkitAppearance: 'none', backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath fill='%236E6E73' d='M0 0l4 5 4-5z'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 7px center', boxShadow: 'none' }}
-                          >
-                            <option value="">— Project —</option>
-                            {myProj.map(pr => <option key={pr.id} value={pr.id}>{pr.name}</option>)}
-                            {otherProj.map(pr => <option key={pr.id} value={pr.id}>{pr.name}</option>)}
-                            <option value="__other__">Other Work</option>
-                          </select>
-                          {promises.length > 1 && (
-                            <button onClick={() => setPromises(prev => prev.filter((_, i) => i !== idx))} style={{ width: 24, height: 24, background: 'none', border: 'none', cursor: 'pointer', color: '#AEAEB2', fontSize: 18, borderRadius: '50%', padding: 0, lineHeight: 1, fontFamily: FONT }}>×</button>
-                          )}
-                        </div>
-                      )
-                    })}
-                    <button onClick={() => setPromises(prev => [...prev, mkPromise()])}
-                      style={{ fontSize: 12, color: '#4b3e9d', background: 'none', border: '1px dashed rgba(75,62,157,0.4)', borderRadius: 7, cursor: 'pointer', padding: '5px 10px', fontFamily: FONT, marginBottom: needWeekly ? 12 : 4 }}>
-                      + Add commitment
-                    </button>
-
-                    {needWeekly && (
-                      <div style={{ marginTop: 4 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: '#4b3e9d' }}>
-                            Weekly commitment — what will you accomplish by <strong>{fmtDue(thisWeekSat)}</strong>?
-                          </div>
-                          <span style={DUE_PILL}>Due {fmtDue(thisWeekSat)}</span>
-                        </div>
-                        <textarea
-                          value={weeklyPromise}
-                          onChange={e => setWeeklyPromise(e.target.value)}
-                          placeholder="Your commitment for this week (required)"
-                          rows={2}
-                          style={{ width: '100%', padding: '8px 10px', border: '1px solid rgba(75,62,157,0.3)', borderRadius: 8, fontSize: 13, fontFamily: FONT, outline: 'none', resize: 'none', background: 'white', boxSizing: 'border-box', lineHeight: 1.5, boxShadow: 'none' }}
-                        />
-                      </div>
-                    )}
+                    <textarea
+                      value={weeklyPromise}
+                      onChange={e => setWeeklyPromise(e.target.value)}
+                      placeholder="Your commitment for this week (required)"
+                      rows={2}
+                      style={{ width: '100%', padding: '8px 10px', border: '1px solid rgba(75,62,157,0.3)', borderRadius: 8, fontSize: 13, fontFamily: FONT, outline: 'none', resize: 'none', background: 'white', boxSizing: 'border-box', lineHeight: 1.5, boxShadow: 'none' }}
+                    />
                   </div>
                 )}
 

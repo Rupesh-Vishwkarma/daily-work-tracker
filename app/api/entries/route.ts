@@ -61,23 +61,8 @@ export async function POST(req: NextRequest) {
 
   const admin = supabaseAdmin()
 
-  // The commitments loop is the core discipline: employees must close out
-  // due follow-ups before submitting a new update (manager on-behalf is exempt).
-  // Marking absent is exempt too — you can't close out work on a day off.
-  if (role !== 'manager' && !is_absent) {
-    const { data: openDue } = await admin.from('commitments')
-      .select('id')
-      .eq('employee_id', employee_id)
-      .eq('status', 'open')
-      // Only daily commitments block submission. Weekly commitments are a
-      // persistent, non-blocking reminder resolved on their own cadence.
-      .eq('horizon', 'day')
-      .lte('due_date', todayIST())
-      .limit(1)
-    if (openDue && openDue.length > 0) {
-      return NextResponse.json({ error: 'Close out your open commitments before submitting today\'s update.' }, { status: 400 })
-    }
-  }
+  // Weekly commitments are a persistent, non-blocking reminder resolved on their
+  // own cadence, so nothing blocks submitting a daily update.
 
   const id = crypto.randomUUID()
   const baseRow: Record<string, unknown> = {

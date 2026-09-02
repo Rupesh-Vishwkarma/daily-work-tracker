@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { todayIST, nextWorkingDay, nextWeekSaturday, workingDaysBetween } from '@/lib/dates'
+import { todayIST, nextWorkingDay, nextWeekSaturday } from '@/lib/dates'
 
 const HORIZONS = ['day', 'week']
 // Completed is the only closing outcome now; Partial / Carry Forward both roll a
@@ -17,30 +17,8 @@ export async function GET(req: NextRequest) {
 
   const admin = supabaseAdmin()
 
-  // Auto-carry: open promises past their due date roll forward to today
-  // with an incremented carry count (PRD §13.2). Only for the user's own
-  // scope so the write is bounded.
-  if (employeeId) {
-    const today = todayIST()
-    const { data: overdue } = await admin
-      .from('commitments')
-      .select('id, carry_count, due_date')
-      .eq('employee_id', employeeId)
-      .eq('status', 'open')
-      // Only daily commitments auto-carry. Weekly commitments are resolved
-      // explicitly and stay visible as a persistent, non-blocking reminder.
-      .eq('horizon', 'day')
-      .lt('due_date', today)
-    if (overdue && overdue.length > 0) {
-      // One carry per missed working day, so a promise ignored for three
-      // days shows "carried ×3", not ×1 — keeps the stalled-work signal honest.
-      await Promise.all(overdue.map(c =>
-        admin.from('commitments')
-          .update({ due_date: today, carry_count: (c.carry_count || 0) + workingDaysBetween(c.due_date, today) })
-          .eq('id', c.id)
-      ))
-    }
-  }
+  // Weekly commitments do not auto-carry — they are resolved explicitly and stay
+  // visible as a persistent, non-blocking reminder until Completed.
 
   let query = admin.from('commitments').select('*')
     .order('due_date', { ascending: false })
