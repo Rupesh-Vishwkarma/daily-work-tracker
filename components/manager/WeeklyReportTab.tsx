@@ -68,14 +68,14 @@ export default function WeeklyReportTab() {
 
   useEffect(() => { load() }, [load])
 
-  async function action(kind: 'generate' | 'send') {
+  async function action(kind: 'generate' | 'send', weekStart = selected) {
     setBusy(kind)
     setError('')
     try {
-      // Target the selected week; with nothing stored yet, omit week_start so
-      // the server uses the current week (todayIST).
+      // Target the given week (default: the selected one); with nothing stored
+      // yet, omit week_start so the server uses the current week (todayIST).
       const body: { action: string; week_start?: string } = { action: kind }
-      if (selected) body.week_start = selected
+      if (weekStart) body.week_start = weekStart
       const res = await fetch('/api/weekly-summary', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       })
@@ -91,6 +91,9 @@ export default function WeeklyReportTab() {
   }
 
   const current = summaries.find(s => s.week_start === selected) || null
+  // summaries is newest-first, so [0] is the week the Sunday job last handled.
+  const latest = summaries[0]
+  const failed = latest && !latest.sent_at && latest.send_error ? latest : null
   const btn: React.CSSProperties = {
     padding: '8px 16px', borderRadius: 9, border: 'none', cursor: 'pointer',
     fontFamily: FONT, fontSize: 13, fontWeight: 600,
@@ -98,6 +101,21 @@ export default function WeeklyReportTab() {
 
   return (
     <div style={{ fontFamily: FONT }}>
+      {failed && (
+        <div style={{ marginBottom: 12, padding: '14px 18px', background: '#fdecea', border: '1px solid #f4c7c3', borderRadius: 12, display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#b3261e' }}>
+              The weekly email for {fmtDate(failed.week_start)} – {fmtDate(failed.week_end)} was not sent
+            </div>
+            <div style={{ fontSize: 12, color: '#3a3a3c', marginTop: 4, wordBreak: 'break-word' }}>{failed.send_error}</div>
+          </div>
+          <button style={{ ...btn, background: '#b3261e', color: 'white' }}
+            disabled={busy !== ''} onClick={() => action('send', failed.week_start)}>
+            {busy === 'send' ? 'Sending…' : 'Retry send'}
+          </button>
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <select value={selected} onChange={e => setSelected(e.target.value)}
           style={{ padding: '8px 12px', borderRadius: 9, borderWidth: 1, borderStyle: 'solid', borderColor: BRAND.border, fontFamily: FONT, fontSize: 13, background: 'white' }}>
