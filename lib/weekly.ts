@@ -44,14 +44,13 @@ export async function generateAndStore(targetDate: string): Promise<WeeklySummar
   return data as WeeklySummary
 }
 
-/** Send the week's summary email (generating first if missing) and record the
- *  outcome on the row. Never throws for a send failure — it records send_error. */
+/** Regenerate the week's summary from current data, send it, and record the
+ *  outcome on the row. Always regenerates: a stored row may be a stale snapshot
+ *  taken mid-week. Never throws for a send failure — it records send_error. */
 export async function sendWeek(targetDate: string): Promise<WeeklySummary> {
   const { weekStart } = weekBoundsFor(targetDate)
   const admin = supabaseAdmin()
-  const { data: existing } = await admin.from('weekly_summaries')
-    .select('*').eq('week_start', weekStart).maybeSingle()
-  const row = (existing as WeeklySummary | null) ?? await generateAndStore(targetDate)
+  const row = await generateAndStore(targetDate)
 
   const result = await sendWeeklyEmail(row.payload)
   const updates = result.ok
